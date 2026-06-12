@@ -8,5 +8,7 @@ runtime/
 *.sqlite3
 *.jsonl
 
+文档/
+
 .DS_Store
 Thumbs.db
