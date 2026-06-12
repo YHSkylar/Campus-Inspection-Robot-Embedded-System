@@ -1,0 +1,60 @@
+{
+  "robot_id": 1,
+  "task_id": 1001,
+  "handler_id": 9001,
+  "cycle_interval_sec": 0.5,
+  "retreat_distance_m": 2.0,
+  "cache_db_path": "runtime/embedded_runtime_ros.db",
+  "report_output_path": "runtime/reported_events_ros.jsonl",
+  "fire": {
+    "smoke_ppm_threshold": 120.0,
+    "temperature_c_threshold": 65.0,
+    "critical_smoke_ppm": 150.0,
+    "critical_temperature_c": 78.0,
+    "suspicion_confidence_threshold": 0.55,
+    "alert_confidence_threshold": 0.8,
+    "confirmation_frames": 3,
+    "cooldown_sec": 10
+  },
+  "intrusion": {
+    "restricted_areas": ["A-3", "A-4", "B-1"],
+    "policy": "whitelist",
+    "suspicion_confidence_threshold": 0.55,
+    "alert_confidence_threshold": 0.85,
+    "confirmation_frames": 3,
+    "cooldown_sec": 10
+  },
+  "leakage": {
+    "min_voltage_v": 200.0,
+    "max_voltage_v": 240.0,
+    "max_current_a": 2.0,
+    "leakage_current_threshold_a": 0.15,
+    "suspicion_confidence_threshold": 0.55,
+    "alert_confidence_threshold": 0.8,
+    "confirmation_frames": 2,
+    "cooldown_sec": 10
+  },
+  "ros": {
+    "enabled": true,
+    "node_name": "inspection_embedded_node",
+    "loop_hz": 2.0,
+    "cmd_vel_topic": "/cmd_vel",
+    "odom_topic": "/odom",
+    "scan_topic": "/scan",
+    "image_topic": "/usb_cam/image_raw",
+    "face_result_topic": "/inspection/face_matches",
+    "smoke_thermal_topic": "/inspection/smoke_thermal",
+    "electrical_topic": "/inspection/electrical",
+    "telemetry_topic": "/inspection/telemetry",
+    "event_topic": "/inspection/abnormal_event",
+    "queue_size": 10,
+    "area_id": "A-3",
+    "frame_storage_dir": "runtime/ros_frames",
+    "retreat_linear_speed_mps": -0.2,
+    "retreat_angular_speed_radps": 0.5,
+    "retreat_step_sec": 0.2,
+    "retreat_publish_hz": 10.0,
+    "safe_back_distance_m": 0.6,
+    "rear_arc_half_width_deg": 25.0
+  }
+}

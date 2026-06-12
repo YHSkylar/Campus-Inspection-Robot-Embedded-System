@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "campus-inspection-embedded"
+version = "0.1.0"
+description = "Embedded sensor subsystem for a campus inspection robot."
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = ["campus_inspection_embedded"]
