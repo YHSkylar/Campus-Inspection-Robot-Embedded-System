@@ -149,7 +149,7 @@ export function Events({ user }: EventsProps) {
                       }}
                       onClick={() => setSelected(ev)}
                     >
-                      <td>{EVENT_LABELS[ev.event_type as EventType] || ev.event_type}</td>
+                  <td>{EVENT_LABELS[ev.event_type as EventType] || ev.event_type}</td>
                       <td>{(ev.confidence * 100).toFixed(0)}%</td>
                       <td>
                         <StatusBadge status={ev.status} />
@@ -196,6 +196,12 @@ export function Events({ user }: EventsProps) {
                 </dd>
                 <dt>本地告警</dt>
                 <dd>{selected.local_alert ? "是" : "否"}</dd>
+                {selected.event_type === "unauthorized_person" && (
+                  <>
+                    <dt>人脸校验</dt>
+                    <dd>未命中白名单即告警</dd>
+                  </>
+                )}
                 <dt>语音播报</dt>
                 <dd>{selected.voice_broadcast ? "是" : "否"}</dd>
                 {selected.snapshot_url && (

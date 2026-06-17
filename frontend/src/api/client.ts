@@ -11,8 +11,9 @@ import type {
   Task,
   TaskMode,
 } from "./types";
+import { API_BASE_URL } from "../config/app";
 
-const API_BASE = "/api";
+const API_BASE = API_BASE_URL.replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;

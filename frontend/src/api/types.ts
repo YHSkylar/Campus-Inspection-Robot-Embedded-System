@@ -19,9 +19,9 @@ export type TaskStatus =
 export type EventType =
   | "fire"
   | "smoke"
-  | "intrusion"
-  | "overstay"
-  | "electric_leakage";
+  | "obstacle"
+  | "boundary"
+  | "unauthorized_person";
 
 export type DisposeAction =
   | "remote_speak"
@@ -162,11 +162,11 @@ export const MODE_LABELS: Record<TaskMode, string> = {
 };
 
 export const EVENT_LABELS: Record<EventType, string> = {
-  fire: "火警",
+  fire: "火焰",
   smoke: "烟雾",
-  intrusion: "非法入侵",
-  overstay: "越界停留",
-  electric_leakage: "漏电风险",
+  obstacle: "障碍",
+  boundary: "边界",
+  unauthorized_person: "未授权人员",
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -185,6 +185,9 @@ export const STATUS_LABELS: Record<string, string> = {
   monitoring: "监控中",
   reported: "已上报",
   cached: "缓存待补发",
+  face_required: "需人脸采样",
+  authorized_person: "白名单人员",
+  person_face_required: "需人脸复核",
 };
 
 export const DISPOSE_LABELS: Record<DisposeAction, string> = {

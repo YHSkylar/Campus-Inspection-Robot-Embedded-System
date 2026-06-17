@@ -1,36 +1,18 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ROLE_LABELS } from "../api/types";
+import { API_BASE_URL, APP_NAME } from "../config/app";
 import type { AuthUser } from "../hooks/useAuth";
 import { clearUser } from "../hooks/useAuth";
+import { NAV_ITEMS, PAGE_TITLES } from "../routes/appRoutes";
 
 interface LayoutProps {
   user: AuthUser;
 }
 
-const NAV_ITEMS = [
-  { to: "/", label: "总览", icon: "📊" },
-  { to: "/tasks", label: "巡检任务", icon: "📋" },
-  { to: "/inspection", label: "巡检执行", icon: "🤖" },
-  { to: "/events", label: "危险告警", icon: "🚨" },
-  { to: "/devices", label: "设备监控", icon: "📡" },
-  { to: "/maintenance", label: "系统维护", icon: "🔧" },
-  { to: "/query", label: "数据查询", icon: "📈" },
-];
-
-const PAGE_TITLES: Record<string, string> = {
-  "/": "系统总览",
-  "/tasks": "巡检任务管理",
-  "/inspection": "自主巡检执行",
-  "/events": "危险识别与告警",
-  "/devices": "设备状态监控",
-  "/maintenance": "系统维护",
-  "/query": "数据查询与统计",
-};
-
 export function Layout({ user }: LayoutProps) {
   const navigate = useNavigate();
-  const currentPath = window.location.pathname;
-  const pageTitle = PAGE_TITLES[currentPath] || "园区巡检机器人";
+  const location = useLocation();
+  const pageTitle = PAGE_TITLES[location.pathname] || APP_NAME;
 
   function handleLogout() {
     clearUser();
@@ -41,7 +23,7 @@ export function Layout({ user }: LayoutProps) {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <h1>园区巡检机器人</h1>
+          <h1>{APP_NAME}</h1>
           <p>控制中心 FU-001 ~ FU-007</p>
         </div>
         <nav className="sidebar-nav">
@@ -54,7 +36,9 @@ export function Layout({ user }: LayoutProps) {
                 `nav-link${isActive ? " active" : ""}`
               }
             >
-              <span>{item.icon}</span>
+              <span className="nav-icon" aria-hidden="true">
+                {item.icon}
+              </span>
               {item.label}
             </NavLink>
           ))}
@@ -76,7 +60,7 @@ export function Layout({ user }: LayoutProps) {
       <div className="main-content">
         <header className="topbar">
           <h2>{pageTitle}</h2>
-          <span className="refresh-indicator">后端 API · /api</span>
+          <span className="refresh-indicator">后端 API · {API_BASE_URL}</span>
         </header>
         <main className="page-body">
           <Outlet />

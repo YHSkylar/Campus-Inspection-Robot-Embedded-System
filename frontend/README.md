@@ -18,7 +18,7 @@
 
 ## 启动方式
 
-### 1. 启动后端
+### 1. 开发模式
 
 ```bash
 cd backend
@@ -28,10 +28,6 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-后端地址：`http://127.0.0.1:8000`
-
-### 2. 启动前端
-
 ```bash
 cd frontend
 npm install
@@ -39,6 +35,23 @@ npm run dev
 ```
 
 前端地址：`http://127.0.0.1:5173`（开发模式自动代理 `/api` 到后端）
+
+### 2. 后端单服务模式
+
+```bash
+cd frontend
+npm install
+npm run build
+
+cd ../backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+页面和 API 都通过后端服务访问：
+
+- 前端页面：`http://127.0.0.1:8000/`
+- API 文档：`http://127.0.0.1:8000/docs`
 
 ## 默认账号
 
@@ -54,7 +67,7 @@ npm run dev
 
 嵌入式端通过 HTTP 上报至后端，前端实时展示：
 
-- **危险事件**：嵌入式检测火灾/入侵/漏电后，调用 `POST /api/events/detect` 上报，前端在「危险告警」页展示
+- **危险事件**：嵌入式检测火焰/烟雾/障碍/边界/未授权人员后，调用 `POST /api/events/detect` 上报，前端在「危险告警」页展示
 - **设备状态**：嵌入式周期上报 `POST /api/devices/status`，前端在「设备监控」页展示降级模式与传感器状态
 - **缓存补发**：网络中断时事件缓存，恢复后可通过「补发缓存」按钮触发 `POST /api/events/flush-cache`
 

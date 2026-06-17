@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 Role = Literal["admin", "control_center", "duty_manager", "security", "maintainer"]
 TaskMode = Literal["fixed", "scheduled", "random", "planned_path"]
 TaskAction = Literal["start", "pause", "stop", "complete"]
-EventType = Literal["fire", "smoke", "intrusion", "overstay", "electric_leakage"]
+EventType = Literal["fire", "smoke", "obstacle", "boundary", "unauthorized_person"]
 DisposeAction = Literal[
     "remote_speak",
     "light_intensify",

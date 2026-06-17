@@ -77,6 +77,13 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS known_faces (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                role TEXT,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS robots (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -192,6 +199,19 @@ def seed_defaults() -> None:
         VALUES (?, ?, ?, ?, ?)
         """,
         default_users,
+    )
+    execute_many(
+        """
+        INSERT OR IGNORE INTO known_faces (id, name, role, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        [
+            ("admin", "系统管理员", "admin", now),
+            ("center", "控制中心人员", "control_center", now),
+            ("duty", "值班主管", "duty_manager", now),
+            ("security", "安保人员", "security", now),
+            ("maintainer", "维护工程师", "maintainer", now),
+        ],
     )
     execute(
         """

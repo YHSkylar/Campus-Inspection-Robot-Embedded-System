@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
@@ -28,49 +29,158 @@ MODE_ALIASES = {
 EVENT_ALIASES = {
     "火警": "fire",
     "火焰": "fire",
+    "明火": "fire",
+    "火灾": "fire",
+    "燃烧": "fire",
     "fire": "fire",
+    "flame": "fire",
     "烟雾": "smoke",
+    "烟": "smoke",
     "smoke": "smoke",
-    "非法入侵": "intrusion",
-    "入侵": "intrusion",
-    "人员入侵": "intrusion",
-    "intrusion": "intrusion",
-    "越界停留": "overstay",
-    "overstay": "overstay",
-    "漏电": "electric_leakage",
-    "漏电风险": "electric_leakage",
-    "electric_leakage": "electric_leakage",
+    "haze": "smoke",
+    "障碍": "obstacle",
+    "障碍物": "obstacle",
+    "路障": "obstacle",
+    "obstacle": "obstacle",
+    "barrier": "obstacle",
+    "边界": "boundary",
+    "越界": "boundary",
+    "边线": "boundary",
+    "boundary": "boundary",
+    "border": "boundary",
+    "人员": "unauthorized_person",
+    "人员告警": "unauthorized_person",
+    "人脸": "unauthorized_person",
+    "未授权人员": "unauthorized_person",
+    "陌生人": "unauthorized_person",
+    "unauthorized_person": "unauthorized_person",
+    "unauthorized person": "unauthorized_person",
+    "person": "unauthorized_person",
+    "human": "unauthorized_person",
+    "非法入侵": "unauthorized_person",
+    "入侵": "unauthorized_person",
+    "人员入侵": "unauthorized_person",
+    "intrusion": "unauthorized_person",
 }
 
 EVENT_PRIORITY = {
     "fire": 1,
     "smoke": 2,
-    "intrusion": 3,
-    "overstay": 4,
-    "electric_leakage": 5,
+    "obstacle": 3,
+    "boundary": 4,
+    "unauthorized_person": 5,
 }
+
+SUPPORTED_EVENT_TYPE_LIST = tuple(EVENT_PRIORITY)
+SUPPORTED_EVENT_TYPES = set(SUPPORTED_EVENT_TYPE_LIST)
 
 IMAGE_EVENT_RULES = {
     "fire": {
-        "keywords": {"fire", "flame", "火", "火焰", "火警"},
-        "feature_keys": {"flame_score", "temperature_high", "red_area_ratio"},
+        "keywords": {
+            "fire",
+            "flame",
+            "flames",
+            "burning",
+            "blaze",
+            "open_fire",
+            "火",
+            "火焰",
+            "火警",
+            "明火",
+            "火苗",
+            "火灾",
+            "燃烧",
+            "着火",
+        },
+        "feature_keys": {
+            "flame_score",
+            "fire_score",
+            "fire_probability",
+            "flame_probability",
+            "flame_detected",
+            "fire_detected",
+            "open_flame",
+            "fire_pixel_ratio",
+            "red_area_ratio",
+            "orange_area_ratio",
+            "yellow_area_ratio",
+            "hot_spot_score",
+            "thermal_fire_score",
+        },
     },
     "smoke": {
-        "keywords": {"smoke", "烟", "烟雾", "灰雾"},
-        "feature_keys": {"smoke_score", "gray_area_ratio", "haze_density"},
+        "keywords": {"smoke", "haze", "gray haze", "烟", "烟雾", "浓烟", "灰雾"},
+        "feature_keys": {"smoke_score", "gray_area_ratio", "haze_density", "smoke_density"},
     },
-    "intrusion": {
-        "keywords": {"person", "human", "intrusion", "非法入侵", "人员", "闯入"},
-        "feature_keys": {"person_score", "human_count", "restricted_area_overlap"},
+    "obstacle": {
+        "keywords": {
+            "obstacle",
+            "barrier",
+            "blockage",
+            "blocked",
+            "roadblock",
+            "debris",
+            "障碍",
+            "障碍物",
+            "路障",
+            "阻挡",
+            "堵塞",
+        },
+        "feature_keys": {
+            "obstacle_score",
+            "blocked_area_ratio",
+            "obstruction_score",
+            "obstacle_count",
+        },
     },
-    "overstay": {
-        "keywords": {"overstay", "loitering", "越界停留", "滞留"},
-        "feature_keys": {"stay_seconds", "boundary_overlap"},
+    "boundary": {
+        "keywords": {
+            "boundary",
+            "border",
+            "edge",
+            "line",
+            "fence",
+            "restricted_boundary",
+            "边界",
+            "越界",
+            "边线",
+            "围栏",
+            "警戒线",
+        },
+        "feature_keys": {
+            "boundary_score",
+            "boundary_overlap",
+            "border_line_score",
+            "out_of_bounds_score",
+        },
     },
-    "electric_leakage": {
-        "keywords": {"leakage", "electric", "spark", "漏电", "电火花"},
-        "feature_keys": {"leakage_score", "current_anomaly", "spark_score"},
-    },
+}
+
+PERSON_KEYWORDS = {
+    "person",
+    "human",
+    "face",
+    "stranger",
+    "unknown_face",
+    "unauthorized",
+    "人员",
+    "人脸",
+    "陌生人",
+    "未授权",
+    "闯入",
+}
+
+PERSON_FEATURE_KEYS = {
+    "person_score",
+    "human_score",
+    "face_score",
+    "face_detected",
+    "face_count",
+    "human_count",
+    "unknown_face",
+    "unknown_face_score",
+    "unauthorized_face_score",
+    "stranger_score",
 }
 
 SENSITIVE_DATA_TYPES = {"logs", "maintenance"}
@@ -89,9 +199,11 @@ class RobotSystemService:
     def normalize_event_type(self, event_type: str) -> str:
         normalized = EVENT_ALIASES.get(event_type)
         if not normalized:
+            normalized = EVENT_ALIASES.get(event_type.strip().lower())
+        if not normalized:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="危险事件类型仅支持火警、烟雾、非法入侵、越界停留、漏电",
+                detail="危险事件类型仅支持火焰、烟雾、障碍、边界、未授权人员",
             )
         return normalized
 
@@ -460,6 +572,93 @@ class RobotSystemService:
         self.log("inspection", f"任务 {task_id} 人工紧急暂停", level="WARN")
         return {"task_id": task_id, "status": "paused", "robot_action": "immediate_stop"}
 
+    def known_face_ids(self) -> set[str]:
+        try:
+            rows = query("SELECT id FROM known_faces")
+        except sqlite3.OperationalError as exc:
+            if "known_faces" not in str(exc).lower():
+                raise
+            from app.db import init_db
+
+            init_db()
+            rows = query("SELECT id FROM known_faces")
+        return {str(row["id"]).lower() for row in rows}
+
+    def extract_face_ids(self, features: dict[str, Any]) -> list[str]:
+        raw_face_ids = (
+            features.get("face_ids")
+            or features.get("recognized_face_ids")
+            or features.get("recognized_faces")
+            or features.get("face_id")
+            or features.get("recognized_face_id")
+        )
+        if raw_face_ids is None:
+            return []
+        if isinstance(raw_face_ids, str):
+            return [raw_face_ids]
+        if isinstance(raw_face_ids, (int, float)):
+            return [str(raw_face_ids)]
+        if isinstance(raw_face_ids, list):
+            return [str(face_id) for face_id in raw_face_ids if face_id not in (None, "")]
+        return []
+
+    def evaluate_person_face(self, tags: list[str], image_url: str, features: dict[str, Any]) -> dict[str, Any]:
+        score = 0.0
+        reasons: list[str] = []
+        for keyword in PERSON_KEYWORDS:
+            keyword_value = str(keyword).lower()
+            if keyword_value in image_url or any(keyword_value in tag for tag in tags):
+                score += 0.30
+                reasons.append(f"图像标签/路径命中 {keyword}")
+
+        for key in PERSON_FEATURE_KEYS:
+            value = features.get(key)
+            if isinstance(value, bool) and value:
+                score += 0.40
+                reasons.append(f"特征 {key}=true")
+            elif isinstance(value, (int, float)):
+                normalized = max(0.0, min(float(value), 1.0))
+                score += normalized * 0.55
+                if normalized > 0:
+                    reasons.append(f"特征 {key}={value}")
+
+        face_ids = self.extract_face_ids(features)
+        known_faces = self.known_face_ids()
+        unknown_face_ids = [
+            face_id for face_id in face_ids if face_id.lower() not in known_faces
+        ]
+        if unknown_face_ids:
+            return {
+                "detected": True,
+                "authorized": False,
+                "score": min(max(score, 0.95), 0.99),
+                "reasons": [*reasons, f"未授权人脸 {', '.join(unknown_face_ids)}"],
+                "face_ids": face_ids,
+            }
+        if face_ids:
+            return {
+                "detected": True,
+                "authorized": True,
+                "score": min(score, 0.99),
+                "reasons": [*reasons, "人脸已在白名单数据库中"],
+                "face_ids": face_ids,
+            }
+        if score > 0:
+            return {
+                "detected": True,
+                "authorized": None,
+                "score": min(score, 0.89),
+                "reasons": [*reasons, "检测到人员但缺少可比对的人脸 ID"],
+                "face_ids": [],
+            }
+        return {
+            "detected": False,
+            "authorized": None,
+            "score": 0.0,
+            "reasons": [],
+            "face_ids": [],
+        }
+
     def infer_event_from_image(self, data: dict[str, Any]) -> dict[str, Any]:
         tags = [str(tag).lower() for tag in data.get("image_tags") or []]
         image_url = str(data.get("image_url") or data.get("snapshot_url") or "").lower()
@@ -472,39 +671,75 @@ class RobotSystemService:
             for keyword in rule["keywords"]:
                 keyword_value = str(keyword).lower()
                 if keyword_value in image_url or any(keyword_value in tag for tag in tags):
-                    score += 0.35
+                    score += 0.50 if event_type == "fire" else 0.35
                     reasons.append(f"图像标签/路径命中 {keyword}")
 
             for key in rule["feature_keys"]:
                 value = features.get(key)
                 if isinstance(value, bool) and value:
-                    score += 0.45
+                    score += 0.60 if event_type == "fire" else 0.45
                     reasons.append(f"特征 {key}=true")
                 elif isinstance(value, (int, float)):
                     normalized = max(0.0, min(float(value), 1.0))
-                    score += normalized * 0.65
+                    score += normalized * (0.85 if event_type == "fire" else 0.65)
                     if normalized > 0:
                         reasons.append(f"特征 {key}={value}")
 
             if score > 0:
                 candidates.append((event_type, min(score, 0.99), reasons))
 
+        person_result = self.evaluate_person_face(tags, image_url, features)
+        if person_result["detected"]:
+            if person_result["authorized"] is False:
+                candidates.append(
+                    (
+                        "unauthorized_person",
+                        float(person_result["score"]),
+                        list(person_result["reasons"]),
+                    )
+                )
+            elif person_result["authorized"] is True:
+                candidates.append(
+                    (
+                        "authorized_person",
+                        float(person_result["score"]),
+                        list(person_result["reasons"]),
+                    )
+                )
+            else:
+                candidates.append(
+                    (
+                        "person_face_required",
+                        float(person_result["score"]),
+                        list(person_result["reasons"]),
+                    )
+                )
+
         if data.get("event_type"):
             # 兼容硬件端已有粗分类输入，但最终类型仍由后端统一标准化和确认。
             event_type = self.normalize_event_type(data["event_type"])
             input_confidence = float(data.get("confidence") or 0.0)
-            candidates.append((event_type, max(input_confidence, 0.5), ["硬件端粗分类输入"]))
+            if event_type == "unauthorized_person" and not person_result["detected"]:
+                candidates.append(
+                    (
+                        "person_face_required",
+                        max(input_confidence, 0.5),
+                        ["硬件端识别到人员，需要人脸数据库复核"],
+                    )
+                )
+            elif event_type in SUPPORTED_EVENT_TYPES and event_type != "unauthorized_person":
+                candidates.append((event_type, max(input_confidence, 0.5), ["硬件端粗分类输入"]))
 
         if not candidates:
             return {
                 "event_type": "unknown",
                 "confidence": 0.0,
-                "reasons": ["未从图像标签、路径或特征中识别到危险类型"],
+                "reasons": ["未从图像标签、路径或特征中识别到火焰、烟雾、障碍、边界或未授权人员"],
             }
 
         event_type, confidence, reasons = sorted(
             candidates,
-            key=lambda item: (-item[1], EVENT_PRIORITY.get(item[0], 99)),
+            key=lambda item: (EVENT_PRIORITY.get(item[0], 99), -item[1]),
         )[0]
         return {"event_type": event_type, "confidence": confidence, "reasons": reasons}
 
@@ -519,7 +754,22 @@ class RobotSystemService:
             return {
                 "confirmed": False,
                 "status": "unrecognized",
-                "message": "后端未识别到火警、烟雾、入侵、越界停留或漏电风险",
+                "message": "后端未识别到火焰、烟雾、障碍、边界或未授权人员",
+                "inference": inference,
+            }
+        if event_type == "authorized_person":
+            return {
+                "confirmed": False,
+                "status": "authorized_person",
+                "message": "检测到人员，但人脸已在数据库中，不触发不可通行告警",
+                "inference": inference,
+            }
+        if event_type == "person_face_required":
+            return {
+                "confirmed": False,
+                "status": "face_required",
+                "message": "检测到人员，但缺少可比对的人脸信息，需继续采样",
+                "required_frames": settings.confirmation_frames,
                 "inference": inference,
             }
         if confidence < settings.detection_confidence_threshold:

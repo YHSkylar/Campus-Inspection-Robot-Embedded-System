@@ -194,7 +194,7 @@ export function Devices() {
           )}
 
           <div style={{ marginTop: 20, fontSize: 12, color: "var(--text-muted)" }}>
-            嵌入式降级策略：烟雾/热敏故障禁用火灾识别，摄像头故障禁用入侵识别，电气传感器故障禁用漏电识别。
+            嵌入式降级策略：烟雾/热敏故障仅影响烟雾与火焰识别，摄像头故障仅影响障碍、边界与人员识别。
           </div>
         </div>
       </div>

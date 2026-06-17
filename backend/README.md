@@ -14,9 +14,20 @@ uvicorn app.main:app --reload
 
 服务启动后访问：
 
+- 前端页面：`http://127.0.0.1:8000/`（需要先执行 `cd frontend && npm run build`）
 - API 文档：`http://127.0.0.1:8000/docs`
 - 健康检查：`GET /api/health`
 - 路由记录：`GET /api/routes`
+
+开发模式下也可以单独启动前端：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+此时页面入口是 `http://127.0.0.1:5173/`，前端开发服务器会代理 `/api` 到后端。
 
 ## 默认账号
 
@@ -46,7 +57,9 @@ uvicorn app.main:app --reload
 - 巡检点确认：`POST /api/inspection/{task_id}/confirm`
 - 后端图像识别：`POST /api/events/detect`
 
-危险识别接口不要求调用方直接给出最终危险类型。后端会根据 `image_url`、`image_tags`、`image_features` 推断火警、烟雾、入侵、越界停留或漏电风险，并在返回值中给出 `inference`。
+危险识别接口不要求调用方直接给出最终危险类型。后端会根据 `image_url`、`image_tags`、`image_features` 推断火焰、烟雾、障碍、边界或未授权人员，并在返回值中给出 `inference`。
+
+人员识别会结合 `known_faces` 白名单表进行比对，白名单命中不触发不可通行告警，未命中才生成 `unauthorized_person` 事件。
 
 示例：
 

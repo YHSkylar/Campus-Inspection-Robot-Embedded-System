@@ -117,7 +117,7 @@ export function QueryPage({ user }: QueryPageProps) {
                 className="form-control"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                placeholder="如 unhandled, running"
+                placeholder="如 unhandled, running, authorized_person"
               />
             </div>
           )}
@@ -128,7 +128,7 @@ export function QueryPage({ user }: QueryPageProps) {
                 className="form-control"
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                placeholder="如 fire, intrusion"
+                placeholder="如 fire, smoke, obstacle"
               />
             </div>
           )}
