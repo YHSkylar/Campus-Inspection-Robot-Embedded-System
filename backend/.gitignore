@@ -1,9 +1,0 @@
-.venv/
-.pycache/
-__pycache__/
-*.py[cod]
-# Local database files
-inspection_robot.db
-inspection_robot.db-*
-*.sqlite
-*.sqlite3
