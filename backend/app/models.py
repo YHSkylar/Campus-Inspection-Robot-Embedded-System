@@ -91,12 +91,12 @@ class DisposeRequest(BaseModel):
 class DeviceStatusRequest(BaseModel):
     robot_id: Optional[str] = None
     battery: int = Field(..., ge=0, le=100)
-    localization: Literal["normal", "lost"] = "normal"
+    localization: Literal["normal", "lost"] = "lost"
     sensor_status: Dict[str, str] = Field(default_factory=dict)
     cpu_usage: float = Field(..., ge=0, le=100)
     memory_usage: float = Field(..., ge=0, le=100)
     signal_strength: int = Field(..., ge=0, le=100)
-    online: bool = True
+    online: bool = False
     location: Optional[Dict[str, Any]] = None
 
 

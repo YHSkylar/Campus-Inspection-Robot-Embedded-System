@@ -250,13 +250,67 @@ class RobotSystemService:
         if role not in allowed and role != "admin":
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="权限不足")
 
+    def normalize_robot_id(self, robot_id: Optional[str] = None) -> str:
+        robot_id = robot_id or settings.default_robot_id
+        if robot_id != settings.default_robot_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="仅支持默认机器人")
+        return robot_id
+
+    def disconnected_device_status(self) -> dict[str, Any]:
+        return {
+            "id": "status-disconnected",
+            "robot_id": settings.default_robot_id,
+            "battery": 0,
+            "localization": "lost",
+            "sensor_status": {},
+            "cpu_usage": 0.0,
+            "memory_usage": 0.0,
+            "signal_strength": 0,
+            "online": False,
+            "mode": "disconnected",
+            "abnormal_flags": ["disconnected"],
+            "created_at": utc_now(),
+        }
+
+    def latest_device_status(self, robot_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+        robot_id = self.normalize_robot_id(robot_id)
+        row = query_one(
+            "SELECT * FROM device_status WHERE robot_id = ? ORDER BY created_at DESC LIMIT 1",
+            (robot_id,),
+        )
+        return self.row_to_device_status(row) if row else None
+
     def robot(self, robot_id: str) -> dict[str, Any]:
-        robot = query_one("SELECT * FROM robots WHERE id = ?", (robot_id,))
-        if not robot:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="机器人不存在")
-        robot["online"] = bool(robot["online"])
-        robot["location"] = loads(robot.get("location"), None)
-        return robot
+        robot_id = self.normalize_robot_id(robot_id)
+        device_status = self.latest_device_status(robot_id)
+        if not device_status:
+            return {
+                "id": robot_id,
+                "name": "巡检机器人",
+                "online": False,
+                "mode": "disconnected",
+                "status": "disconnected",
+                "battery": 0,
+                "location": None,
+                "updated_at": utc_now(),
+            }
+
+        online = bool(device_status["online"])
+        abnormal = (
+            not online
+            or bool(device_status["abnormal_flags"])
+            or device_status["localization"] != "normal"
+        )
+        return {
+            "id": robot_id,
+            "name": "巡检机器人",
+            "online": online,
+            "mode": device_status["mode"],
+            "status": "disconnected" if not online else ("abnormal" if abnormal else "normal"),
+            "battery": device_status["battery"],
+            "location": None,
+            "updated_at": device_status["created_at"],
+        }
 
     def list_routes(self) -> list[dict[str, Any]]:
         return [
@@ -421,16 +475,6 @@ class RobotSystemService:
         }
         status_value = status_map[action]
         execute("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?", (status_value, utc_now(), task_id))
-        if action == "start":
-            execute(
-                "UPDATE robots SET status = 'inspecting', updated_at = ? WHERE id = ?",
-                (utc_now(), task["robot_id"]),
-            )
-        if action in {"stop", "complete"}:
-            execute(
-                "UPDATE robots SET status = 'idle', updated_at = ? WHERE id = ?",
-                (utc_now(), task["robot_id"]),
-            )
         self.log("task", f"任务 {task_id} 执行动作 {action}，状态变为 {status_value}")
         return self.get_task(task_id)
 
@@ -510,11 +554,6 @@ class RobotSystemService:
             """,
             (dumps(completed_nodes), dumps(trajectory), next_status, utc_now(), task_id),
         )
-        if all_confirmed:
-            execute(
-                "UPDATE robots SET status = 'returning_to_standby', updated_at = ? WHERE id = ?",
-                (utc_now(), task["robot_id"]),
-            )
         self.log("inspection", f"任务 {task_id} 确认巡检点 {node_id}，状态 {next_status}")
         return {
             "task": self.get_task(task_id),
@@ -552,10 +591,6 @@ class RobotSystemService:
             """,
             (dumps(trajectory), utc_now(), task_id),
         )
-        execute(
-            "UPDATE robots SET battery = ?, status = 'returning_to_charge', updated_at = ? WHERE id = ?",
-            (battery, utc_now(), task["robot_id"]),
-        )
         self.log("device", f"任务 {task_id} 因低电量中断并自动返航", level="WARN")
         return {
             "task_id": task_id,
@@ -566,9 +601,8 @@ class RobotSystemService:
         }
 
     def emergency_pause(self, task_id: str) -> dict[str, Any]:
-        task = self.get_task(task_id)
+        self.get_task(task_id)
         execute("UPDATE tasks SET status = 'paused', updated_at = ? WHERE id = ?", (utc_now(), task_id))
-        execute("UPDATE robots SET status = 'emergency_paused', updated_at = ? WHERE id = ?", (utc_now(), task["robot_id"]))
         self.log("inspection", f"任务 {task_id} 人工紧急暂停", level="WARN")
         return {"task_id": task_id, "status": "paused", "robot_action": "immediate_stop"}
 
@@ -908,8 +942,7 @@ class RobotSystemService:
         return row
 
     def record_device_status(self, data: dict[str, Any]) -> dict[str, Any]:
-        robot_id = data.get("robot_id") or settings.default_robot_id
-        self.robot(robot_id)
+        robot_id = self.normalize_robot_id(data.get("robot_id"))
         sensor_status = data.get("sensor_status") or {}
         abnormal_flags: list[str] = []
         mode = "main"
@@ -921,8 +954,9 @@ class RobotSystemService:
         if broken_sensors:
             abnormal_flags.append("sensor_fault")
             mode = "degraded"
-        if not data.get("online", True):
+        if not data.get("online", False):
             abnormal_flags.append("offline")
+            mode = "disconnected"
         status_id = self.new_id("status")
         now = utc_now()
         execute(
@@ -942,30 +976,15 @@ class RobotSystemService:
                 data["cpu_usage"],
                 data["memory_usage"],
                 data["signal_strength"],
-                int(data.get("online", True)),
+                int(data.get("online", False)),
                 mode,
                 dumps(abnormal_flags),
                 now,
             ),
         )
-        execute(
-            """
-            UPDATE robots
-            SET online = ?, mode = ?, battery = ?, location = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                int(data.get("online", True)),
-                mode,
-                data["battery"],
-                dumps(data.get("location")),
-                now,
-                robot_id,
-            ),
-        )
         if broken_sensors:
             self.log("device", f"传感器故障 {broken_sensors}，系统切换至降级模式", level="WARN")
-        if data.get("online", True):
+        if data.get("online", False):
             self.redeliver_queued_tasks(robot_id)
         return self.row_to_device_status(query_one("SELECT * FROM device_status WHERE id = ?", (status_id,)))
 
@@ -984,19 +1003,32 @@ class RobotSystemService:
         return len(rows)
 
     def set_robot_online(self, robot_id: str, online: bool) -> dict[str, Any]:
-        self.robot(robot_id)
-        execute(
-            "UPDATE robots SET online = ?, updated_at = ? WHERE id = ?",
-            (int(online), utc_now(), robot_id),
+        robot_id = self.normalize_robot_id(robot_id)
+        latest = self.latest_device_status(robot_id)
+        redelivered = len(
+            query(
+                "SELECT id FROM tasks WHERE robot_id = ? AND dispatch_status = 'queued'",
+                (robot_id,),
+            )
+        ) if online else 0
+        self.record_device_status(
+            {
+                "robot_id": robot_id,
+                "battery": latest["battery"] if latest else 0,
+                "localization": latest["localization"] if latest else "lost",
+                "sensor_status": latest["sensor_status"] if latest else {},
+                "cpu_usage": latest["cpu_usage"] if latest else 0.0,
+                "memory_usage": latest["memory_usage"] if latest else 0.0,
+                "signal_strength": latest["signal_strength"] if latest else 0,
+                "online": online,
+            }
         )
-        redelivered = self.redeliver_queued_tasks(robot_id) if online else 0
         robot = self.robot(robot_id)
         robot["redelivered_tasks"] = redelivered
         return robot
 
-    def current_device_status(self) -> Optional[dict[str, Any]]:
-        row = query_one("SELECT * FROM device_status ORDER BY created_at DESC LIMIT 1")
-        return self.row_to_device_status(row) if row else None
+    def current_device_status(self) -> dict[str, Any]:
+        return self.latest_device_status() or self.disconnected_device_status()
 
     def device_history(self, robot_id: Optional[str] = None) -> list[dict[str, Any]]:
         if robot_id:

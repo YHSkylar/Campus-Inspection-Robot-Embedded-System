@@ -84,17 +84,6 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS robots (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                online INTEGER NOT NULL DEFAULT 1,
-                mode TEXT NOT NULL DEFAULT 'main',
-                status TEXT NOT NULL DEFAULT 'idle',
-                battery INTEGER NOT NULL DEFAULT 100,
-                location TEXT,
-                updated_at TEXT NOT NULL
-            );
-
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
                 robot_id TEXT NOT NULL,
@@ -180,6 +169,7 @@ def init_db() -> None:
             );
             """
         )
+        conn.execute("DROP TABLE IF EXISTS robots")
 
     seed_defaults()
 
@@ -202,31 +192,14 @@ def seed_defaults() -> None:
     )
     execute_many(
         """
-        INSERT OR IGNORE INTO known_faces (id, name, role, created_at)
-        VALUES (?, ?, ?, ?)
+        DELETE FROM known_faces
+        WHERE id = ? AND name = ? AND role = ?
         """,
         [
-            ("admin", "系统管理员", "admin", now),
-            ("center", "控制中心人员", "control_center", now),
-            ("duty", "值班主管", "duty_manager", now),
-            ("security", "安保人员", "security", now),
-            ("maintainer", "维护工程师", "maintainer", now),
+            ("admin", "系统管理员", "admin"),
+            ("center", "控制中心人员", "control_center"),
+            ("duty", "值班主管", "duty_manager"),
+            ("security", "安保人员", "security"),
+            ("maintainer", "维护工程师", "maintainer"),
         ],
-    )
-    execute(
-        """
-        INSERT OR IGNORE INTO robots
-            (id, name, online, mode, status, battery, location, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            settings.default_robot_id,
-            "园区巡检机器人-001",
-            1,
-            "main",
-            "idle",
-            100,
-            dumps({"x": 0, "y": 0, "area": "standby"}),
-            now,
-        ),
     )

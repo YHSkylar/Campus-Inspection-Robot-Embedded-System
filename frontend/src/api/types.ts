@@ -188,6 +188,9 @@ export const STATUS_LABELS: Record<string, string> = {
   face_required: "需人脸采样",
   authorized_person: "白名单人员",
   person_face_required: "需人脸复核",
+  disconnected: "未连接",
+  abnormal: "异常",
+  offline: "离线",
 };
 
 export const DISPOSE_LABELS: Record<DisposeAction, string> = {

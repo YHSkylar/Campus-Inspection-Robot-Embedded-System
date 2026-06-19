@@ -16,7 +16,7 @@ def report_status(payload: DeviceStatusRequest) -> dict[str, object]:
 
 
 @router.get("/status/current")
-def current_status() -> Optional[dict[str, object]]:
+def current_status() -> dict[str, object]:
     return service.current_device_status()
 
 

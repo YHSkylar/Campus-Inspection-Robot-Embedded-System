@@ -45,7 +45,7 @@ export function Devices() {
         <div className="stat-card">
           <div className="label">电量</div>
           <div
-            className={`value ${(current?.battery ?? 100) <= 20 ? "danger" : "success"}`}
+            className={`value ${(current?.battery ?? robot?.battery ?? 0) <= 20 ? "danger" : "success"}`}
           >
             {current?.battery ?? robot?.battery ?? "-"}%
           </div>
@@ -56,7 +56,7 @@ export function Devices() {
             {robot?.online ? (
               <span style={{ color: "var(--success)" }}>在线</span>
             ) : (
-              <span style={{ color: "var(--danger)" }}>离线</span>
+              <span style={{ color: "var(--danger)" }}>未连接</span>
             )}
           </div>
         </div>
@@ -76,7 +76,13 @@ export function Devices() {
                 <dd>
                   <StatusBadge
                     status={current.mode}
-                    label={current.mode === "degraded" ? "降级模式" : "主模式"}
+                    label={
+                      current.mode === "disconnected"
+                        ? "未连接"
+                        : current.mode === "degraded"
+                          ? "降级模式"
+                          : "主模式"
+                    }
                   />
                 </dd>
                 <dt>定位状态</dt>
@@ -157,7 +163,7 @@ export function Devices() {
             </>
           ) : (
             <div className="empty-state">
-              等待嵌入式端通过 POST /api/devices/status 上报数据
+              未连接，等待嵌入式端通过 POST /api/devices/status 上报数据
             </div>
           )}
         </div>

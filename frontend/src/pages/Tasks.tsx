@@ -10,13 +10,6 @@ interface TasksProps {
   user: AuthUser;
 }
 
-const DEFAULT_ROUTE_POINTS = [
-  { id: "1", name: "A区入口", area: "A-1" },
-  { id: "2", name: "A区配电室", area: "A-3" },
-  { id: "3", name: "B区停车场", area: "B-1" },
-  { id: "4", name: "充电站", area: "standby" },
-];
-
 export function Tasks({ user }: TasksProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
@@ -27,11 +20,10 @@ export function Tasks({ user }: TasksProps) {
 
   const [form, setForm] = useState({
     mode: "scheduled" as TaskMode,
-    route_name: "A区日常巡检",
+    route_name: "",
     speed: 0.8,
-    frequency: "每日 08:00",
+    frequency: "",
     conflict_policy: "reject",
-    robot_id: "robot-001",
   });
 
   const canManage = canManageTasks(user.role);
@@ -57,7 +49,7 @@ export function Tasks({ user }: TasksProps) {
     try {
       await api.createTask({
         ...form,
-        route_points: DEFAULT_ROUTE_POINTS,
+        route_points: [],
       });
       setSuccess("任务创建成功");
       setShowCreate(false);
@@ -303,9 +295,6 @@ export function Tasks({ user }: TasksProps) {
                   </select>
                 </div>
               </div>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                默认路线：A区入口 → A区配电室 → B区停车场 → 充电站
-              </p>
               <div className="modal-actions">
                 <button
                   type="button"

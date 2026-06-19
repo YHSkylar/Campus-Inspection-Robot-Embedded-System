@@ -22,6 +22,9 @@ const STATUS_VARIANTS: Record<string, string> = {
   normal: "badge-success",
   degraded: "badge-warning",
   main: "badge-success",
+  abnormal: "badge-danger",
+  disconnected: "badge-danger",
+  offline: "badge-danger",
 };
 
 interface StatusBadgeProps {

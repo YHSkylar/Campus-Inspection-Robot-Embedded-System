@@ -193,7 +193,7 @@ export const api = {
 
   // FU-005 设备监控
   currentDeviceStatus: () =>
-    request<DeviceStatus | null>("/devices/status/current"),
+    request<DeviceStatus>("/devices/status/current"),
 
   deviceHistory: (robotId?: string) =>
     request<DeviceStatus[]>(

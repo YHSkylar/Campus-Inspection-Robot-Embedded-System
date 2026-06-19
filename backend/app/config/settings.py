@@ -6,6 +6,9 @@ from pydantic import BaseModel
 import os
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
 class Settings(BaseModel):
     app_name: str = "Park Inspection Robot Backend"
     api_prefix: str = "/api"
@@ -22,8 +25,9 @@ class Settings(BaseModel):
     @property
     def database_path(self) -> Path:
         if self.database_url.startswith("sqlite:///"):
-            return Path(self.database_url.replace("sqlite:///", "", 1))
-        return Path("inspection_robot.db")
+            raw_path = Path(self.database_url.replace("sqlite:///", "", 1))
+            return raw_path if raw_path.is_absolute() else PROJECT_ROOT / raw_path
+        return PROJECT_ROOT / "inspection_robot.db"
 
 
 @lru_cache
