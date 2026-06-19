@@ -1,0 +1,21 @@
+frame_id: map
+route:
+  - start
+  - inspection_1
+  - inspection_2
+waypoints:
+  - id: start
+    name: start_charging_area
+    x: 0.0
+    y: -3.0
+    yaw: 1.5708
+  - id: inspection_1
+    name: left_upper_area
+    x: -1.8
+    y: 2.4
+    yaw: 0.0
+  - id: inspection_2
+    name: right_upper_area
+    x: 1.8
+    y: 2.4
+    yaw: 3.1416
