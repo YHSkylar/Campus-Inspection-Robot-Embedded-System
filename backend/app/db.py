@@ -81,6 +81,8 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 role TEXT,
+                image_path TEXT,
+                updated_at TEXT,
                 created_at TEXT NOT NULL
             );
 
@@ -170,6 +172,14 @@ def init_db() -> None:
             """
         )
         conn.execute("DROP TABLE IF EXISTS robots")
+        known_face_columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(known_faces)").fetchall()
+        }
+        if "image_path" not in known_face_columns:
+            conn.execute("ALTER TABLE known_faces ADD COLUMN image_path TEXT")
+        if "updated_at" not in known_face_columns:
+            conn.execute("ALTER TABLE known_faces ADD COLUMN updated_at TEXT")
 
     seed_defaults()
 
@@ -201,6 +211,7 @@ def seed_defaults() -> None:
         """
         DELETE FROM known_faces
         WHERE id = ? AND name = ? AND role = ?
+          AND (image_path IS NULL OR image_path = '')
         """,
         [
             ("admin", "系统管理员", "admin"),
@@ -216,4 +227,17 @@ def seed_defaults() -> None:
         VALUES (?, ?, ?, ?)
         """,
         default_known_faces,
+    )
+    execute(
+        """
+        DELETE FROM known_faces
+        WHERE image_path IS NULL OR image_path = ''
+        """
+    )
+    execute(
+        """
+        UPDATE known_faces
+        SET updated_at = COALESCE(updated_at, created_at)
+        WHERE updated_at IS NULL OR updated_at = ''
+        """
     )

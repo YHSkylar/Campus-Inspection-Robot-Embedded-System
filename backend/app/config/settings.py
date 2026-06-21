@@ -17,6 +17,7 @@ class Settings(BaseModel):
     max_task_speed: float = 2.0
     low_battery_threshold: int = 20
     detection_confidence_threshold: float = 0.9
+    face_match_threshold: float = 0.75
     confirmation_frames: int = 3
     status_refresh_seconds: int = 1
     alarm_report_deadline_seconds: int = 2
@@ -52,6 +53,9 @@ def get_settings() -> Settings:
                 "DETECTION_CONFIDENCE_THRESHOLD",
                 base.detection_confidence_threshold,
             )
+        ),
+        face_match_threshold=float(
+            os.getenv("FACE_MATCH_THRESHOLD", base.face_match_threshold)
         ),
         confirmation_frames=int(
             os.getenv("CONFIRMATION_FRAMES", base.confirmation_frames)

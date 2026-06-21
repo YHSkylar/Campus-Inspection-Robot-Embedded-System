@@ -3,6 +3,7 @@ import type {
   DeviceStatus,
   DisposeAction,
   HealthStatus,
+  KnownFace,
   LogEntry,
   LoginResponse,
   MaintenanceRecord,
@@ -147,6 +148,8 @@ export const api = {
       confirmed_count: number;
       total_nodes: number;
       all_confirmed: boolean;
+      detection_results?: Array<Record<string, unknown>>;
+      fire_event_result?: Record<string, unknown>;
     }>(`/inspection/${taskId}/confirm`, {
       method: "POST",
       body: JSON.stringify(data),
@@ -172,6 +175,68 @@ export const api = {
   flushCache: () =>
     request<{ flushed: number; report_status: string }>("/events/flush-cache", {
       method: "POST",
+    }),
+
+  listFaces: () => request<KnownFace[]>("/faces"),
+
+  saveFace: (data: {
+    face_id: string;
+    name: string;
+    role?: string;
+    image_path?: string;
+  }) =>
+    request<KnownFace>("/faces", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  uploadFace: async (
+    data: {
+      face_id: string;
+      name: string;
+      role?: string;
+      filename?: string;
+    },
+    file: File,
+  ) => {
+    const token = getToken();
+    const params = new URLSearchParams({
+      face_id: data.face_id,
+      name: data.name,
+    });
+    if (data.role) params.set("role_name", data.role);
+    if (data.filename) params.set("filename", data.filename);
+
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/faces/upload?${params.toString()}`, {
+      method: "POST",
+      headers,
+      body: await file.arrayBuffer(),
+    });
+
+    if (!response.ok) {
+      let message = `请求失败 (${response.status})`;
+      try {
+        const body = await response.json();
+        if (body.detail) {
+          message = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+        }
+      } catch {
+        // ignore
+      }
+      throw new ApiError(response.status, message);
+    }
+
+    return response.json() as Promise<{ face: KnownFace; upload: Record<string, unknown> }>;
+  },
+
+  deleteFace: (faceId: string) =>
+    request<{ id: string; message: string }>(`/faces/${encodeURIComponent(faceId)}`, {
+      method: "DELETE",
     }),
 
   // FU-004 危险处置

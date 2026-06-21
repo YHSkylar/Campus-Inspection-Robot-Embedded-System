@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Dashboard } from "../pages/Dashboard";
 import { Devices } from "../pages/Devices";
 import { Events } from "../pages/Events";
+import { Faces } from "../pages/Faces";
 import { Inspection } from "../pages/Inspection";
 import { Maintenance } from "../pages/Maintenance";
 import { QueryPage } from "../pages/Query";
@@ -65,6 +66,16 @@ export const PROTECTED_ROUTES: ProtectedRouteConfig[] = [
       icon: "🚨",
     },
     render: (user) => <Events user={user} />,
+  },
+  {
+    path: "faces",
+    nav: {
+      to: "/faces",
+      label: "人脸白名单",
+      title: "人脸白名单",
+      icon: "Face",
+    },
+    render: (user) => <Faces user={user} />,
   },
   {
     path: "devices",

@@ -95,6 +95,15 @@ export interface DangerEvent {
   updated_at: string;
 }
 
+export interface KnownFace {
+  id: string;
+  name: string;
+  role?: string;
+  image_path?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DeviceStatus {
   id: string;
   robot_id: string;

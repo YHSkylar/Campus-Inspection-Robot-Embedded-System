@@ -1,6 +1,6 @@
 ﻿import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { FireDetectionMode, RoutePoint, Task, TaskMode } from "../api/types";
+import type { RoutePoint, Task, TaskMode } from "../api/types";
 import { MODE_LABELS } from "../api/types";
 import { StatusBadge } from "../components/StatusBadge";
 import type { AuthUser } from "../hooks/useAuth";
@@ -10,16 +10,13 @@ interface TasksProps {
   user: AuthUser;
 }
 
+const WAYPOINT_OPTIONS = ["area_A", "area_B", "area_C"];
+
 function createEmptyRoutePoint(index: number): RoutePoint {
   return {
     id: String(index + 1),
     node_id: String(index + 1),
-    name: "",
     waypoint_name: "",
-    fire_detection_mode: undefined,
-    fire_image_path: "",
-    face_image_path: "",
-    note: "",
   };
 }
 
@@ -28,42 +25,9 @@ function normalizeRoutePoints(routePoints: RoutePoint[]): RoutePoint[] {
     .map((point, index) => ({
       id: String(point.id || point.node_id || index + 1),
       node_id: String(point.node_id || point.id || index + 1),
-      name: point.name?.trim() || `巡检点 ${index + 1}`,
-      area: point.area?.trim() || undefined,
       waypoint_name: point.waypoint_name?.trim() || undefined,
-      fire_detection_mode: point.fire_detection_mode || undefined,
-      fire_image_path: point.fire_image_path?.trim() || undefined,
-      face_image_path: point.face_image_path?.trim() || undefined,
-      inspection_image_path: point.inspection_image_path?.trim() || undefined,
-      note: point.note?.trim() || undefined,
     }))
-    .filter((point) => {
-      return Boolean(
-        point.name ||
-          point.waypoint_name ||
-          point.fire_detection_mode ||
-          point.fire_image_path ||
-          point.face_image_path ||
-          point.inspection_image_path ||
-          point.note,
-      );
-    });
-}
-
-function fireDetectionLabel(point: RoutePoint): string {
-  if (point.fire_detection_mode === "camera") return "火焰实时抓帧";
-  if (point.fire_detection_mode === "image") return point.fire_image_path ? "火焰静态图" : "火焰静态图(待填路径)";
-  return "";
-}
-
-function routePointSummary(point: RoutePoint): string {
-  const flags: string[] = [];
-  if (point.waypoint_name) flags.push(`航点 ${point.waypoint_name}`);
-  const fireMode = fireDetectionLabel(point);
-  if (fireMode) flags.push(fireMode);
-  if (point.face_image_path) flags.push("人脸图");
-  if (point.inspection_image_path) flags.push("通用图");
-  return flags.join(" / ");
+    .filter((point) => Boolean(point.waypoint_name));
 }
 
 export function Tasks({ user }: TasksProps) {
@@ -78,8 +42,6 @@ export function Tasks({ user }: TasksProps) {
     mode: "scheduled" as TaskMode,
     route_name: "",
     speed: 0.8,
-    frequency: "",
-    conflict_policy: "reject",
   });
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([createEmptyRoutePoint(0)]);
 
@@ -94,8 +56,6 @@ export function Tasks({ user }: TasksProps) {
       mode: "scheduled",
       route_name: "",
       speed: 0.8,
-      frequency: "",
-      conflict_policy: "reject",
     });
     setRoutePoints([createEmptyRoutePoint(0)]);
   }
@@ -112,12 +72,6 @@ export function Tasks({ user }: TasksProps) {
         pointIndex === index ? { ...point, ...patch } : point,
       ),
     );
-  }
-
-  function updateFireDetectionMode(index: number, mode: FireDetectionMode | undefined) {
-    updateRoutePoint(index, {
-      fire_detection_mode: mode,
-    });
   }
 
   function addRoutePoint() {
@@ -156,7 +110,7 @@ export function Tasks({ user }: TasksProps) {
     try {
       const normalizedRoutePoints = normalizeRoutePoints(routePoints);
       if (normalizedRoutePoints.length === 0) {
-        setError("至少需要配置一个巡检点，且应包含航点名、实时检测方式或识别图片路径");
+        setError("至少需要配置一个巡检点，并选择航点名");
         setLoading(false);
         return;
       }
@@ -390,42 +344,12 @@ export function Tasks({ user }: TasksProps) {
                   />
                 </div>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>频率</label>
-                  <input
-                    className="form-control"
-                    value={form.frequency}
-                    onChange={(e) =>
-                      setForm({ ...form, frequency: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="form-group">
-                  <label>冲突策略</label>
-                  <select
-                    className="form-control"
-                    value={form.conflict_policy}
-                    onChange={(e) =>
-                      setForm({ ...form, conflict_policy: e.target.value })
-                    }
-                  >
-                    <option value="reject">拒绝</option>
-                    <option value="queue">排队</option>
-                    <option value="cover">覆盖</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="card" style={{ padding: 16, marginTop: 12 }}>
                 <div className="card-title" style={{ marginBottom: 12 }}>
                   巡检点配置
                   <button type="button" className="btn btn-secondary btn-sm" onClick={addRoutePoint}>
                     + 添加点位
                   </button>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                  火焰检测现在支持两种方式：到点后实时摄像头抓帧，或继续使用静态图片路径。人脸检测仍使用静态图片路径。
                 </div>
                 {routePoints.map((point, index) => (
                   <div
@@ -448,84 +372,22 @@ export function Tasks({ user }: TasksProps) {
                         删除
                       </button>
                     </div>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>点位名称</label>
-                        <input
-                          className="form-control"
-                          value={point.name || ""}
-                          onChange={(e) => updateRoutePoint(index, { name: e.target.value })}
-                          placeholder="如 图书馆北门"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>航点名</label>
-                        <input
-                          className="form-control"
-                          value={point.waypoint_name || ""}
-                          onChange={(e) => updateRoutePoint(index, { waypoint_name: e.target.value })}
-                          placeholder="如 gate_north_1"
-                        />
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>火焰检测方式</label>
-                        <select
-                          className="form-control"
-                          value={point.fire_detection_mode || ""}
-                          onChange={(e) =>
-                            updateFireDetectionMode(
-                              index,
-                              (e.target.value || undefined) as FireDetectionMode | undefined,
-                            )
-                          }
-                        >
-                          <option value="">不启用</option>
-                          <option value="camera">到点后实时抓帧</option>
-                          <option value="image">静态图片路径</option>
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label>人脸识别图片路径</label>
-                        <input
-                          className="form-control"
-                          value={point.face_image_path || ""}
-                          onChange={(e) => updateRoutePoint(index, { face_image_path: e.target.value })}
-                          placeholder="如 /home/robot/assets/face_01.jpg"
-                        />
-                      </div>
-                    </div>
-                    {point.fire_detection_mode === "image" && (
-                      <div className="form-group">
-                        <label>火焰识别图片路径</label>
-                        <input
-                          className="form-control"
-                          value={point.fire_image_path || ""}
-                          onChange={(e) => updateRoutePoint(index, { fire_image_path: e.target.value })}
-                          placeholder="如 /home/robot/assets/fire_01.jpg"
-                        />
-                      </div>
-                    )}
-                    {point.fire_detection_mode === "camera" && (
-                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                        机器人到达该点后会等待摄像头稳定，并连续抓取多帧图像做火焰检测。
-                      </div>
-                    )}
                     <div className="form-group">
-                      <label>备注</label>
-                      <input
+                      <label>航点名</label>
+                      <select
                         className="form-control"
-                        value={point.note || ""}
-                        onChange={(e) => updateRoutePoint(index, { note: e.target.value })}
-                        placeholder="如 夜间只做人脸检查"
-                      />
+                        value={point.waypoint_name || ""}
+                        onChange={(e) => updateRoutePoint(index, { waypoint_name: e.target.value })}
+                        required
+                      >
+                        <option value="">请选择航点</option>
+                        {WAYPOINT_OPTIONS.map((waypoint) => (
+                          <option key={waypoint} value={waypoint}>
+                            {waypoint}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    {routePointSummary(point) && (
-                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                        已配置：{routePointSummary(point)}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

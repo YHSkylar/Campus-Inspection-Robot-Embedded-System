@@ -364,6 +364,10 @@ class RobotSystemService:
             {"method": "POST", "path": "/api/events/flush-cache", "module": "events"},
             {"method": "POST", "path": "/api/events/{event_id}/dispose", "module": "events"},
             {"method": "GET", "path": "/api/events", "module": "events"},
+            {"method": "GET", "path": "/api/faces", "module": "faces"},
+            {"method": "POST", "path": "/api/faces", "module": "faces"},
+            {"method": "POST", "path": "/api/faces/upload", "module": "faces"},
+            {"method": "DELETE", "path": "/api/faces/{face_id}", "module": "faces"},
             {"method": "POST", "path": "/api/devices/status", "module": "devices"},
             {"method": "GET", "path": "/api/devices/status/current", "module": "devices"},
             {"method": "GET", "path": "/api/devices/status/history", "module": "devices"},
@@ -386,24 +390,7 @@ class RobotSystemService:
 
         robot_id = data.get("robot_id") or settings.default_robot_id
         robot = self.robot(robot_id)
-        conflict_policy = data.get("conflict_policy", "reject")
-        conflicts = query(
-            """
-            SELECT * FROM tasks
-            WHERE robot_id = ? AND status IN ('pending', 'running', 'paused')
-            """,
-            (robot_id,),
-        )
-        if conflicts and conflict_policy == "reject":
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="存在任务冲突")
-        if conflicts and conflict_policy == "cover":
-            execute(
-                """
-                UPDATE tasks SET status = 'cancelled', updated_at = ?
-                WHERE robot_id = ? AND status IN ('pending', 'running', 'paused')
-                """,
-                (utc_now(), robot_id),
-            )
+        conflict_policy = "queue"
 
         dispatch_status = "dispatched" if robot["online"] else "queued"
         task_id = self.new_id("task")
@@ -488,7 +475,7 @@ class RobotSystemService:
                 merged.get("frequency"),
                 merged.get("start_time"),
                 merged.get("end_time"),
-                merged.get("conflict_policy", "reject"),
+                "queue",
                 utc_now(),
                 task_id,
             ),
@@ -562,6 +549,15 @@ class RobotSystemService:
             str(point.get("id") or point.get("node_id") or index + 1)
             for index, point in enumerate(route_points)
         }
+        route_point = next(
+            (
+                point
+                for index, point in enumerate(route_points)
+                if str(point.get("id") or point.get("node_id") or index + 1)
+                == node_id
+            ),
+            None,
+        )
         if route_points and node_id not in valid_node_ids:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -597,27 +593,76 @@ class RobotSystemService:
         )
 
         fire_event_result = None
+        detection_results: list[dict[str, Any]] = []
         snapshot_url = str(data.get("snapshot_url") or "").strip()
-        if snapshot_url:
-            fire_event_result = self.detect_event(
+        seen_image_paths: set[str] = set()
+
+        def run_node_detection(
+            kind: str,
+            image_path: Any,
+            event_type: str | None,
+            tags: list[str],
+            features: dict[str, Any] | None = None,
+        ) -> Optional[dict[str, Any]]:
+            nonlocal fire_event_result
+            image_value = str(image_path or "").strip()
+            if not image_value or image_value in seen_image_paths:
+                return None
+            seen_image_paths.add(image_value)
+            result = self.detect_event(
                 {
                     "robot_id": task.get("robot_id") or settings.default_robot_id,
-                    "event_type": "fire",
+                    "event_type": event_type,
                     "confidence": 0.0,
-                    "image_url": snapshot_url,
-                    "snapshot_url": snapshot_url,
-                    "image_tags": ["inspection"],
-                    "image_features": {},
+                    "image_url": image_value,
+                    "snapshot_url": image_value,
+                    "image_tags": ["inspection", *tags],
+                    "image_features": features or {},
                     "location": data.get("location"),
                     "network_online": True,
                     "payload": {
                         "source": "inspection_confirm",
+                        "detection_kind": kind,
                         "task_id": task_id,
                         "node_id": node_id,
                         "sensor_summary": sensor_summary,
                     },
                 }
             )
+            detection_results.append(
+                {"kind": kind, "image_path": image_value, "result": result}
+            )
+            if kind == "fire":
+                fire_event_result = result
+            return result
+
+        if route_point:
+            fire_mode = route_point.get("fire_detection_mode")
+            if fire_mode == "image":
+                run_node_detection(
+                    "fire",
+                    route_point.get("fire_image_path"),
+                    "fire",
+                    ["fire"],
+                )
+            elif fire_mode == "camera":
+                run_node_detection("fire", snapshot_url, "fire", ["fire"])
+
+            run_node_detection(
+                "face",
+                route_point.get("face_image_path"),
+                "unauthorized_person",
+                ["face", "person"],
+                {"face_check_requested": True},
+            )
+            run_node_detection(
+                "inspection",
+                route_point.get("inspection_image_path"),
+                None,
+                ["inspection"],
+            )
+        elif snapshot_url:
+            run_node_detection("inspection", snapshot_url, None, ["inspection"])
 
         self.log("inspection", f"task {task_id} confirmed node {node_id}, status {next_status}")
         response = {
@@ -626,6 +671,7 @@ class RobotSystemService:
             "confirmed_count": len(completed_nodes),
             "total_nodes": len(route_points),
             "all_confirmed": all_confirmed,
+            "detection_results": detection_results,
         }
         if fire_event_result is not None:
             response["fire_event_result"] = fire_event_result
@@ -685,6 +731,119 @@ class RobotSystemService:
             init_db()
             rows = query("SELECT id FROM known_faces")
         return {str(row["id"]).lower() for row in rows}
+
+    def row_to_known_face(self, row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "role": row.get("role"),
+            "image_path": row.get("image_path"),
+            "created_at": row["created_at"],
+            "updated_at": row.get("updated_at") or row["created_at"],
+        }
+
+    def list_known_faces(self) -> list[dict[str, Any]]:
+        try:
+            rows = query(
+                """
+                SELECT id, name, role, image_path, created_at,
+                       COALESCE(updated_at, created_at) AS updated_at
+                FROM known_faces
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            )
+        except sqlite3.OperationalError as exc:
+            if "known_faces" not in str(exc).lower() and "image_path" not in str(exc).lower():
+                raise
+            from app.db import init_db
+
+            init_db()
+            rows = query(
+                """
+                SELECT id, name, role, image_path, created_at,
+                       COALESCE(updated_at, created_at) AS updated_at
+                FROM known_faces
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            )
+        return [self.row_to_known_face(row) for row in rows]
+
+    def get_known_face(self, face_id: str) -> dict[str, Any]:
+        row = query_one(
+            """
+            SELECT id, name, role, image_path, created_at,
+                   COALESCE(updated_at, created_at) AS updated_at
+            FROM known_faces
+            WHERE id = ?
+            """,
+            (face_id,),
+        )
+        if not row:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="known face not found")
+        return self.row_to_known_face(row)
+
+    def known_face_references(self) -> list[dict[str, Any]]:
+        references: list[dict[str, Any]] = []
+        for face in self.list_known_faces():
+            raw_path = str(face.get("image_path") or "").strip()
+            if not raw_path:
+                continue
+            resolved_path = self.resolve_local_image_path(raw_path)
+            references.append(
+                {
+                    "id": face["id"],
+                    "name": face["name"],
+                    "role": face.get("role"),
+                    "image_path": str(resolved_path or raw_path),
+                    "source_image_path": raw_path,
+                }
+            )
+        return references
+
+    def upsert_known_face(self, data: dict[str, Any]) -> dict[str, Any]:
+        face_id = str(data.get("face_id") or data.get("id") or "").strip()
+        if not face_id:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="face_id is required")
+
+        existing = query_one("SELECT * FROM known_faces WHERE id = ?", (face_id,))
+        now = utc_now()
+        name_value = data.get("name") or data.get("label") or (
+            existing.get("name") if existing else face_id
+        )
+        name = str(name_value).strip()
+        role = data.get("role") if "role" in data else (existing.get("role") if existing else None)
+        if "image_path" in data:
+            image_path = str(data.get("image_path") or "").strip() or None
+        else:
+            image_path = existing.get("image_path") if existing else None
+
+        execute(
+            """
+            INSERT INTO known_faces (id, name, role, image_path, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                role = excluded.role,
+                image_path = excluded.image_path,
+                updated_at = excluded.updated_at
+            """,
+            (
+                face_id,
+                name or face_id,
+                role,
+                image_path,
+                existing.get("created_at") if existing else now,
+                now,
+            ),
+        )
+        self.log("face", f"known face {face_id} saved")
+        return self.get_known_face(face_id)
+
+    def delete_known_face(self, face_id: str) -> dict[str, str]:
+        self.get_known_face(face_id)
+        execute("DELETE FROM known_faces WHERE id = ?", (face_id,))
+        self.log("face", f"known face {face_id} deleted", level="WARN")
+        return {"id": face_id, "message": "deleted"}
 
     def extract_face_ids(self, features: dict[str, Any]) -> list[str]:
         raw_face_ids = (
@@ -778,6 +937,7 @@ class RobotSystemService:
             or payload.get("face_reference_path")
             or payload.get("reference_face_path")
         )
+        reference_faces = self.known_face_references()
 
         try:
             from app.services.image_detection import analyze_image_confidence
@@ -785,6 +945,8 @@ class RobotSystemService:
             analysis = analyze_image_confidence(
                 image_path,
                 reference_face_path=reference_face_path,
+                reference_faces=reference_faces,
+                face_match_threshold=settings.face_match_threshold,
             )
         except Exception as exc:
             payload["backend_image_analysis"] = {
@@ -811,6 +973,13 @@ class RobotSystemService:
             "fire_confidence": analysis.get("fire_confidence", 0.0),
             "face_confidence": analysis.get("face_confidence", 0.0),
             "face_count": analysis.get("face_count", 0),
+            "face_whitelist_checked": bool(
+                analysis_features.get("face_whitelist_checked")
+            ),
+            "face_whitelist_matched": bool(
+                analysis_features.get("face_whitelist_matched")
+            ),
+            "face_whitelist_reference_count": len(reference_faces),
         }
         if analysis.get("face_boxes"):
             payload["backend_face_boxes"] = analysis["face_boxes"]
@@ -826,6 +995,11 @@ class RobotSystemService:
     def evaluate_person_face(self, tags: list[str], image_url: str, features: dict[str, Any]) -> dict[str, Any]:
         score = 0.0
         reasons: list[str] = []
+        face_check_requested = bool(features.get("face_check_requested")) or (
+            "face" in image_url
+            or any("face" in tag or "person" in tag or "human" in tag for tag in tags)
+        )
+        face_count = int(features.get("face_count") or 0)
         for keyword in PERSON_KEYWORDS:
             keyword_value = str(keyword).lower()
             if keyword_value in image_url or any(keyword_value in tag for tag in tags):
@@ -834,6 +1008,18 @@ class RobotSystemService:
 
         for key in PERSON_FEATURE_KEYS:
             value = features.get(key)
+            if (
+                key in {
+                    "face_score",
+                    "face_detected",
+                    "unknown_face_score",
+                    "unauthorized_face_score",
+                }
+                and bool(features.get("face_whitelist_checked"))
+                and not face_check_requested
+                and face_count <= 0
+            ):
+                continue
             if isinstance(value, bool) and value:
                 score += 0.40
                 reasons.append(f"特征 {key}=true")
@@ -844,6 +1030,41 @@ class RobotSystemService:
                     reasons.append(f"特征 {key}={value}")
 
         face_ids = self.extract_face_ids(features)
+        face_context_available = (
+            face_check_requested
+            or face_count > 0
+            or bool(face_ids)
+            or (bool(features.get("face_detected")) and not whitelist_checked)
+        )
+        whitelist_checked = bool(features.get("face_whitelist_checked"))
+        whitelist_matched = bool(features.get("face_whitelist_matched"))
+        whitelist_best_match = features.get("face_whitelist_best_match")
+        if whitelist_checked and whitelist_matched and face_context_available:
+            matched_ids = face_ids or (
+                [str(whitelist_best_match.get("face_id"))]
+                if isinstance(whitelist_best_match, dict)
+                and whitelist_best_match.get("face_id")
+                else []
+            )
+            return {
+                "detected": True,
+                "authorized": True,
+                "score": min(max(score, 0.95), 0.99),
+                "reasons": [*reasons, "face whitelist matched"],
+                "face_ids": matched_ids,
+            }
+        if whitelist_checked and not whitelist_matched and face_context_available:
+            best_score = 0.0
+            if isinstance(whitelist_best_match, dict):
+                best_score = float(whitelist_best_match.get("confidence") or 0.0)
+            return {
+                "detected": True,
+                "authorized": False,
+                "score": min(max(score, 0.95, best_score), 0.99),
+                "reasons": [*reasons, "face whitelist not matched"],
+                "face_ids": face_ids,
+            }
+
         known_faces = self.known_face_ids()
         unknown_face_ids = [
             face_id for face_id in face_ids if face_id.lower() not in known_faces

@@ -34,7 +34,7 @@ class TaskCreate(BaseModel):
     frequency: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    conflict_policy: Literal["reject", "queue", "cover"] = "reject"
+    conflict_policy: Literal["queue"] = "queue"
 
 
 class TaskUpdate(BaseModel):
@@ -45,7 +45,7 @@ class TaskUpdate(BaseModel):
     frequency: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    conflict_policy: Optional[Literal["reject", "queue", "cover"]] = None
+    conflict_policy: Optional[Literal["queue"]] = None
 
 
 class TaskActionRequest(BaseModel):
@@ -75,6 +75,13 @@ class DetectionRequest(BaseModel):
     snapshot_url: Optional[str] = None
     network_online: bool = True
     payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class KnownFaceRequest(BaseModel):
+    face_id: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    role: Optional[str] = None
+    image_path: Optional[str] = None
 
 
 class BatchDetectionRequest(BaseModel):

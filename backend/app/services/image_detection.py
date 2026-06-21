@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import colorsys
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from PIL import Image, ImageOps
 
@@ -222,6 +222,67 @@ def calculate_face_match_confidence(image: Image.Image, reference_image: Image.I
     return round(_clamp_confidence(confidence), 4)
 
 
+def compare_face_whitelist(
+    image: Image.Image,
+    reference_faces: Sequence[Mapping[str, Any]],
+    threshold: float = FACE_MATCH_THRESHOLD,
+) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    for reference in reference_faces:
+        raw_path = reference.get("image_path") or reference.get("path")
+        if not raw_path:
+            continue
+
+        face_id = str(reference.get("id") or reference.get("face_id") or Path(raw_path).stem)
+        result: dict[str, Any] = {
+            "face_id": face_id,
+            "name": reference.get("name") or reference.get("label") or face_id,
+            "role": reference.get("role"),
+            "image_path": str(raw_path),
+        }
+        try:
+            with Image.open(raw_path) as reference_original:
+                reference_image = ImageOps.exif_transpose(reference_original).convert("RGB")
+            confidence = calculate_face_match_confidence(image, reference_image)
+            result.update(
+                {
+                    "confidence": confidence,
+                    "matched": confidence >= threshold,
+                    "status": "completed",
+                }
+            )
+        except Exception as exc:
+            result.update(
+                {
+                    "confidence": 0.0,
+                    "matched": False,
+                    "status": "error",
+                    "reason": str(exc),
+                }
+            )
+        results.append(result)
+
+    completed_results = [
+        result for result in results if result.get("status") == "completed"
+    ]
+    best_match = max(
+        completed_results,
+        key=lambda result: float(result.get("confidence") or 0.0),
+        default=None,
+    )
+    matched_results = [
+        result for result in completed_results if bool(result.get("matched"))
+    ]
+    return {
+        "checked": bool(completed_results),
+        "matched": bool(matched_results),
+        "matched_face_ids": [str(result["face_id"]) for result in matched_results],
+        "best_match": best_match,
+        "matches": results,
+        "threshold": threshold,
+    }
+
+
 def detect_face_boxes(image: Image.Image) -> list[FaceBox]:
     try:
         import cv2
@@ -254,6 +315,8 @@ def analyze_image_confidence(
     image_path: str | Path,
     face_detector: FaceDetector | None = None,
     reference_face_path: str | Path | None = None,
+    reference_faces: Sequence[Mapping[str, Any]] | None = None,
+    face_match_threshold: float = FACE_MATCH_THRESHOLD,
 ) -> dict[str, Any]:
     path = Path(image_path)
     if not path.exists():
@@ -277,6 +340,16 @@ def analyze_image_confidence(
         face_confidence = calculate_face_confidence(face_boxes, image.size)
         face_detected = face_confidence > 0
 
+    whitelist_result = compare_face_whitelist(
+        image,
+        reference_faces or [],
+        threshold=face_match_threshold,
+    )
+    if whitelist_result["checked"]:
+        best_match = whitelist_result.get("best_match") or {}
+        face_confidence = float(best_match.get("confidence") or 0.0)
+        face_detected = bool(face_boxes) or bool(whitelist_result["matched"])
+
     return {
         "image_path": str(path),
         "fire_confidence": fire_confidence,
@@ -293,5 +366,11 @@ def analyze_image_confidence(
             "face_count": len(face_boxes),
             "face_detected": face_detected,
             "face_reference_path": face_reference_path,
+            "face_whitelist_checked": whitelist_result["checked"],
+            "face_whitelist_matched": whitelist_result["matched"],
+            "face_whitelist_threshold": whitelist_result["threshold"],
+            "face_whitelist_best_match": whitelist_result["best_match"],
+            "face_whitelist_matches": whitelist_result["matches"],
+            "face_ids": whitelist_result["matched_face_ids"],
         },
     }
