@@ -1,0 +1,4 @@
+inspection_robot.db
+node_modules/
+dist/
+*.tsbuildinfo
