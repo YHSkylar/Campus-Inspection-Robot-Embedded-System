@@ -132,7 +132,7 @@ export function Events({ user }: EventsProps) {
                 {events.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="empty-state">
-                      暂无事件（嵌入式端检测到异常后将上报至此）
+                      暂无事件
                     </td>
                   </tr>
                 ) : (

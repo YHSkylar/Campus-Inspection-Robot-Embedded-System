@@ -2,11 +2,6 @@ import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { QueryResult } from "../api/types";
 import { StatusBadge } from "../components/StatusBadge";
-import type { AuthUser } from "../hooks/useAuth";
-
-interface QueryPageProps {
-  user: AuthUser;
-}
 
 const DATA_TYPES = [
   { value: "events", label: "危险事件" },
@@ -17,7 +12,7 @@ const DATA_TYPES = [
   { value: "maintenance", label: "维护记录" },
 ];
 
-export function QueryPage({ user }: QueryPageProps) {
+export function QueryPage() {
   const [dataType, setDataType] = useState("events");
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -117,7 +112,6 @@ export function QueryPage({ user }: QueryPageProps) {
                 className="form-control"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                placeholder="如 unhandled, running, authorized_person"
               />
             </div>
           )}
@@ -128,7 +122,6 @@ export function QueryPage({ user }: QueryPageProps) {
                 className="form-control"
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                placeholder="如 fire, smoke, obstacle"
               />
             </div>
           )}
@@ -208,15 +201,6 @@ export function QueryPage({ user }: QueryPageProps) {
         ) : result ? (
           <div className="empty-state">无匹配数据</div>
         ) : null}
-      </div>
-
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-title">查询说明</div>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.8 }}>
-          当前用户：<strong>{user.username}</strong>（{user.role}）。
-          日志和维护记录为敏感数据，仅 admin 和 maintainer 可查看完整内容。
-          导出接口返回数据列表，前端支持 JSON 本地下载。
-        </p>
       </div>
     </>
   );

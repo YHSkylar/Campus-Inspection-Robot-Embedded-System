@@ -68,8 +68,6 @@ export function Dashboard() {
           <div className="card-title">机器人状态</div>
           {device ? (
             <dl className="detail-grid">
-              <dt>机器人 ID</dt>
-              <dd>{device.robot_id}</dd>
               <dt>电量</dt>
               <dd>
                 {device.battery}%
@@ -118,7 +116,7 @@ export function Dashboard() {
               )}
             </dl>
           ) : (
-            <div className="empty-state">暂无设备状态数据（等待嵌入式端上报）</div>
+            <div className="empty-state">暂无设备状态</div>
           )}
         </div>
 

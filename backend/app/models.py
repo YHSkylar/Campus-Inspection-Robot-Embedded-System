@@ -5,10 +5,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-Role = Literal["admin", "control_center", "duty_manager", "security", "maintainer"]
-TaskMode = Literal["fixed", "scheduled", "random", "planned_path"]
 TaskAction = Literal["start", "pause", "stop", "complete"]
-EventType = Literal["fire", "smoke", "obstacle", "boundary", "unauthorized_person"]
 DisposeAction = Literal[
     "remote_speak",
     "light_intensify",
@@ -109,10 +106,6 @@ class DeviceStatusRequest(BaseModel):
 
 class InspectionStartRequest(BaseModel):
     task_id: str
-
-
-class BatterySignalRequest(BaseModel):
-    battery: int = Field(..., ge=0, le=100)
 
 
 class MaintenanceRequest(BaseModel):

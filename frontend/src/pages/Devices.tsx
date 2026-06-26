@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { DeviceStatus, Robot } from "../api/types";
+import type { DeviceStatus } from "../api/types";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function Devices() {
   const [current, setCurrent] = useState<DeviceStatus | null>(null);
   const [history, setHistory] = useState<DeviceStatus[]>([]);
-  const [robot, setRobot] = useState<Robot | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -17,14 +16,12 @@ export function Devices() {
 
   async function loadData() {
     try {
-      const [status, hist, robotData] = await Promise.all([
+      const [status, hist] = await Promise.all([
         api.currentDeviceStatus(),
-        api.deviceHistory("robot-001"),
-        api.getRobot("robot-001"),
+        api.deviceHistory(),
       ]);
       setCurrent(status);
       setHistory(hist);
-      setRobot(robotData);
       setError("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "加载失败");
@@ -37,172 +34,123 @@ export function Devices() {
 
       <div className="grid-3" style={{ marginBottom: 24 }}>
         <div className="stat-card">
-          <div className="label">机器人名称</div>
+          <div className="label">在线状态</div>
           <div className="value" style={{ fontSize: 18 }}>
-            {robot?.name || "-"}
+            {current?.online ? (
+              <span style={{ color: "var(--success)" }}>在线</span>
+            ) : (
+              <span style={{ color: "var(--danger)" }}>离线</span>
+            )}
           </div>
         </div>
         <div className="stat-card">
           <div className="label">电量</div>
           <div
-            className={`value ${(current?.battery ?? robot?.battery ?? 0) <= 20 ? "danger" : "success"}`}
+            className={`value ${(current?.battery ?? 0) <= 20 ? "danger" : "success"}`}
           >
-            {current?.battery ?? robot?.battery ?? "-"}%
+            {current?.battery ?? "-"}%
           </div>
         </div>
         <div className="stat-card">
-          <div className="label">在线状态</div>
+          <div className="label">定位状态</div>
           <div className="value" style={{ fontSize: 18 }}>
-            {robot?.online ? (
-              <span style={{ color: "var(--success)" }}>在线</span>
+            {current?.localization === "normal" ? (
+              <span style={{ color: "var(--success)" }}>正常</span>
             ) : (
-              <span style={{ color: "var(--danger)" }}>未连接</span>
+              <span style={{ color: "var(--danger)" }}>丢失</span>
             )}
           </div>
         </div>
       </div>
 
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-title">实时设备状态</div>
-          {current ? (
-            <>
-              <dl className="detail-grid">
-                <dt>记录 ID</dt>
-                <dd>{current.id}</dd>
-                <dt>机器人 ID</dt>
-                <dd>{current.robot_id}</dd>
-                <dt>运行模式</dt>
-                <dd>
-                  <StatusBadge
-                    status={current.mode}
-                    label={
-                      current.mode === "disconnected"
-                        ? "未连接"
-                        : current.mode === "degraded"
-                          ? "降级模式"
-                          : "主模式"
-                    }
-                  />
-                </dd>
-                <dt>定位状态</dt>
-                <dd>
-                  <StatusBadge
-                    status={current.localization}
-                    label={
-                      current.localization === "normal" ? "定位正常" : "定位丢失"
-                    }
-                  />
-                </dd>
-                <dt>CPU 使用率</dt>
-                <dd>
-                  {current.cpu_usage.toFixed(1)}%
-                  <div className="progress-bar">
-                    <div
-                      className="fill"
-                      style={{ width: `${current.cpu_usage}%` }}
-                    />
-                  </div>
-                </dd>
-                <dt>内存使用率</dt>
-                <dd>
-                  {current.memory_usage.toFixed(1)}%
-                  <div className="progress-bar">
-                    <div
-                      className="fill"
-                      style={{ width: `${current.memory_usage}%` }}
-                    />
-                  </div>
-                </dd>
-                <dt>信号强度</dt>
-                <dd>{current.signal_strength}%</dd>
-                <dt>更新时间</dt>
-                <dd>{new Date(current.created_at).toLocaleString("zh-CN")}</dd>
-              </dl>
-
-              {Object.keys(current.sensor_status).length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div className="card-title" style={{ fontSize: 13 }}>
-                    传感器状态
-                  </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>传感器</th>
-                          <th>状态</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(current.sensor_status).map(
-                          ([name, status]) => (
-                            <tr key={name}>
-                              <td>{name}</td>
-                              <td>
-                                <StatusBadge
-                                  status={
-                                    status === "normal" ? "success" : "fault"
-                                  }
-                                  label={status}
-                                />
-                              </td>
-                            </tr>
-                          ),
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {current.abnormal_flags.length > 0 && (
-                <div className="alert alert-error" style={{ marginTop: 16 }}>
-                  异常标记：{current.abnormal_flags.join("、")}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="empty-state">
-              未连接，等待嵌入式端通过 POST /api/devices/status 上报数据
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="card-title">机器人信息</div>
-          {robot ? (
+      <div className="card">
+        <div className="card-title">实时设备状态</div>
+        {current ? (
+          <>
             <dl className="detail-grid">
-              <dt>ID</dt>
-              <dd>{robot.id}</dd>
-              <dt>名称</dt>
-              <dd>{robot.name}</dd>
-              <dt>状态</dt>
+              <dt>运行模式</dt>
               <dd>
-                <StatusBadge status={robot.status} label={robot.status} />
+                <StatusBadge
+                  status={current.mode}
+                  label={
+                    current.mode === "disconnected"
+                      ? "未连接"
+                      : current.mode === "degraded"
+                        ? "降级模式"
+                        : "主模式"
+                  }
+                />
               </dd>
-              <dt>模式</dt>
+              <dt>CPU 使用率</dt>
               <dd>
-                <StatusBadge status={robot.mode} />
+                {current.cpu_usage.toFixed(1)}%
+                <div className="progress-bar">
+                  <div
+                    className="fill"
+                    style={{ width: `${current.cpu_usage}%` }}
+                  />
+                </div>
               </dd>
-              <dt>电量</dt>
-              <dd>{robot.battery}%</dd>
-              <dt>位置</dt>
+              <dt>内存使用率</dt>
               <dd>
-                {robot.location
-                  ? JSON.stringify(robot.location)
-                  : "未知"}
+                {current.memory_usage.toFixed(1)}%
+                <div className="progress-bar">
+                  <div
+                    className="fill"
+                    style={{ width: `${current.memory_usage}%` }}
+                  />
+                </div>
               </dd>
-              <dt>更新</dt>
-              <dd>{new Date(robot.updated_at).toLocaleString("zh-CN")}</dd>
+              <dt>信号强度</dt>
+              <dd>{current.signal_strength}%</dd>
+              <dt>更新时间</dt>
+              <dd>{new Date(current.created_at).toLocaleString("zh-CN")}</dd>
             </dl>
-          ) : (
-            <div className="empty-state">加载中...</div>
-          )}
 
-          <div style={{ marginTop: 20, fontSize: 12, color: "var(--text-muted)" }}>
-            嵌入式降级策略：烟雾/热敏故障仅影响烟雾与火焰识别，摄像头故障仅影响障碍、边界与人员识别。
-          </div>
-        </div>
+            {Object.keys(current.sensor_status).length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div className="card-title" style={{ fontSize: 13 }}>
+                  传感器状态
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>传感器</th>
+                        <th>状态</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(current.sensor_status).map(
+                        ([name, status]) => (
+                          <tr key={name}>
+                            <td>{name}</td>
+                            <td>
+                              <StatusBadge
+                                status={
+                                  status === "normal" ? "success" : "fault"
+                                }
+                                label={status}
+                              />
+                            </td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {current.abnormal_flags.length > 0 && (
+              <div className="alert alert-error" style={{ marginTop: 16 }}>
+                异常标记：{current.abnormal_flags.join("、")}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="empty-state">暂无设备状态</div>
+        )}
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>

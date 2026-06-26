@@ -23,8 +23,6 @@ export type EventType =
   | "boundary"
   | "unauthorized_person";
 
-export type FireDetectionMode = "camera" | "image";
-
 export type DisposeAction =
   | "remote_speak"
   | "light_intensify"
@@ -50,10 +48,6 @@ export interface RoutePoint {
   x?: number;
   y?: number;
   yaw?: number;
-  fire_detection_mode?: FireDetectionMode;
-  fire_image_path?: string;
-  face_image_path?: string;
-  inspection_image_path?: string;
   note?: string;
 }
 
@@ -117,17 +111,6 @@ export interface DeviceStatus {
   mode: string;
   abnormal_flags: string[];
   created_at: string;
-}
-
-export interface Robot {
-  id: string;
-  name: string;
-  online: boolean;
-  mode: string;
-  status: string;
-  battery: number;
-  location?: Record<string, unknown>;
-  updated_at: string;
 }
 
 export interface MaintenanceRecord {

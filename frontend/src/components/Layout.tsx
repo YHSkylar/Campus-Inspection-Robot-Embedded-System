@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ROLE_LABELS } from "../api/types";
-import { API_BASE_URL, APP_NAME } from "../config/app";
+import { APP_NAME } from "../config/app";
 import type { AuthUser } from "../hooks/useAuth";
 import { clearUser } from "../hooks/useAuth";
 import { NAV_ITEMS, PAGE_TITLES } from "../routes/appRoutes";
@@ -60,7 +60,6 @@ export function Layout({ user }: LayoutProps) {
       <div className="main-content">
         <header className="topbar">
           <h2>{pageTitle}</h2>
-          <span className="refresh-indicator">后端 API · {API_BASE_URL}</span>
         </header>
         <main className="page-body">
           <Outlet />

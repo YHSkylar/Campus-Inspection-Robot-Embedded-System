@@ -311,37 +311,21 @@ class RobotSystemService:
         )
         return self.row_to_device_status(row) if row else None
 
-    def robot(self, robot_id: str) -> dict[str, Any]:
-        robot_id = self.normalize_robot_id(robot_id)
-        device_status = self.latest_device_status(robot_id)
-        if not device_status:
-            return {
-                "id": robot_id,
-                "name": "巡检机器人",
-                "online": False,
-                "mode": "disconnected",
-                "status": "disconnected",
-                "battery": 0,
-                "location": None,
-                "updated_at": utc_now(),
-            }
+    def is_robot_online(self, robot_id: Optional[str] = None) -> bool:
+        latest = self.latest_device_status(robot_id)
+        return bool(latest and latest["online"])
 
-        online = bool(device_status["online"])
-        abnormal = (
-            not online
-            or bool(device_status["abnormal_flags"])
-            or device_status["localization"] != "normal"
-        )
-        return {
-            "id": robot_id,
-            "name": "巡检机器人",
-            "online": online,
-            "mode": device_status["mode"],
-            "status": "disconnected" if not online else ("abnormal" if abnormal else "normal"),
-            "battery": device_status["battery"],
-            "location": None,
-            "updated_at": device_status["created_at"],
-        }
+    def device_health_status(self) -> str:
+        latest = self.latest_device_status()
+        if not latest:
+            return "abnormal"
+        if (
+            not latest["online"]
+            or latest["localization"] != "normal"
+            or latest["abnormal_flags"]
+        ):
+            return "abnormal"
+        return "ok"
 
     def list_routes(self) -> list[dict[str, Any]]:
         return [
@@ -356,8 +340,6 @@ class RobotSystemService:
             {"method": "DELETE", "path": "/api/tasks/{task_id}", "module": "tasks"},
             {"method": "POST", "path": "/api/inspection/start", "module": "inspection"},
             {"method": "POST", "path": "/api/inspection/{task_id}/confirm", "module": "inspection"},
-            {"method": "POST", "path": "/api/inspection/{task_id}/obstacle", "module": "inspection"},
-            {"method": "POST", "path": "/api/inspection/{task_id}/battery", "module": "inspection"},
             {"method": "POST", "path": "/api/inspection/{task_id}/emergency-pause", "module": "inspection"},
             {"method": "POST", "path": "/api/events/detect", "module": "events"},
             {"method": "POST", "path": "/api/events/detect/batch", "module": "events"},
@@ -371,7 +353,6 @@ class RobotSystemService:
             {"method": "POST", "path": "/api/devices/status", "module": "devices"},
             {"method": "GET", "path": "/api/devices/status/current", "module": "devices"},
             {"method": "GET", "path": "/api/devices/status/history", "module": "devices"},
-            {"method": "POST", "path": "/api/devices/{robot_id}/online", "module": "devices"},
             {"method": "POST", "path": "/api/maintenance/operate", "module": "maintenance"},
             {"method": "GET", "path": "/api/maintenance/logs", "module": "maintenance"},
             {"method": "GET", "path": "/api/query", "module": "query"},
@@ -388,11 +369,10 @@ class RobotSystemService:
             )
         self.validate_time_range(data.get("start_time"), data.get("end_time"))
 
-        robot_id = data.get("robot_id") or settings.default_robot_id
-        robot = self.robot(robot_id)
+        robot_id = self.normalize_robot_id(data.get("robot_id"))
         conflict_policy = "queue"
 
-        dispatch_status = "dispatched" if robot["online"] else "queued"
+        dispatch_status = "dispatched" if self.is_robot_online(robot_id) else "queued"
         task_id = self.new_id("task")
         now = utc_now()
         execute(
@@ -504,14 +484,14 @@ class RobotSystemService:
 
     def dispatch_task(self, task_id: str, force: bool = False) -> dict[str, Any]:
         task = self.get_task(task_id)
-        robot = self.robot(task["robot_id"])
+        robot_online = self.is_robot_online(task["robot_id"])
         if task["status"] in {"deleted", "cancelled", "completed"} and not force:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="当前任务状态不可下发")
 
         if not task["route_points"]:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="巡检路线不能为空，无法下发")
 
-        if robot["online"]:
+        if robot_online:
             dispatch_status = "dispatched"
             message = "任务已下发至机器人，机器人已确认接收"
         else:
@@ -527,7 +507,7 @@ class RobotSystemService:
             (dispatch_status, utc_now(), task_id),
         )
         self.log("task", f"{message}：{task_id}")
-        return {"message": message, "task": self.get_task(task_id), "robot_online": robot["online"]}
+        return {"message": message, "task": self.get_task(task_id), "robot_online": robot_online}
 
     def start_inspection(self, task_id: str) -> dict[str, Any]:
         task = self.task_action(task_id, "start")
@@ -595,34 +575,31 @@ class RobotSystemService:
         fire_event_result = None
         detection_results: list[dict[str, Any]] = []
         snapshot_url = str(data.get("snapshot_url") or "").strip()
-        seen_image_paths: set[str] = set()
+        legacy_snapshot_url = ""
+        if route_point:
+            for key in ("inspection_image_path", "fire_image_path", "face_image_path"):
+                candidate = str(route_point.get(key) or "").strip()
+                if candidate:
+                    legacy_snapshot_url = candidate
+                    break
 
-        def run_node_detection(
-            kind: str,
-            image_path: Any,
-            event_type: str | None,
-            tags: list[str],
-            features: dict[str, Any] | None = None,
-        ) -> Optional[dict[str, Any]]:
-            nonlocal fire_event_result
-            image_value = str(image_path or "").strip()
-            if not image_value or image_value in seen_image_paths:
-                return None
-            seen_image_paths.add(image_value)
+        capture_url = snapshot_url or legacy_snapshot_url
+        if capture_url:
             result = self.detect_event(
                 {
                     "robot_id": task.get("robot_id") or settings.default_robot_id,
-                    "event_type": event_type,
                     "confidence": 0.0,
-                    "image_url": image_value,
-                    "snapshot_url": image_value,
-                    "image_tags": ["inspection", *tags],
-                    "image_features": features or {},
+                    "image_url": capture_url,
+                    "snapshot_url": capture_url,
+                    "image_tags": ["inspection"],
+                    "image_features": {
+                        "capture_mode": "realtime_capture" if snapshot_url else "legacy_route_point",
+                    },
                     "location": data.get("location"),
                     "network_online": True,
                     "payload": {
                         "source": "inspection_confirm",
-                        "detection_kind": kind,
+                        "capture_mode": "realtime_capture" if snapshot_url else "legacy_route_point",
                         "task_id": task_id,
                         "node_id": node_id,
                         "sensor_summary": sensor_summary,
@@ -630,39 +607,10 @@ class RobotSystemService:
                 }
             )
             detection_results.append(
-                {"kind": kind, "image_path": image_value, "result": result}
+                {"kind": "snapshot", "image_path": capture_url, "result": result}
             )
-            if kind == "fire":
+            if result.get("inference", {}).get("event_type") == "fire":
                 fire_event_result = result
-            return result
-
-        if route_point:
-            fire_mode = route_point.get("fire_detection_mode")
-            if fire_mode == "image":
-                run_node_detection(
-                    "fire",
-                    route_point.get("fire_image_path"),
-                    "fire",
-                    ["fire"],
-                )
-            elif fire_mode == "camera":
-                run_node_detection("fire", snapshot_url, "fire", ["fire"])
-
-            run_node_detection(
-                "face",
-                route_point.get("face_image_path"),
-                "unauthorized_person",
-                ["face", "person"],
-                {"face_check_requested": True},
-            )
-            run_node_detection(
-                "inspection",
-                route_point.get("inspection_image_path"),
-                None,
-                ["inspection"],
-            )
-        elif snapshot_url:
-            run_node_detection("inspection", snapshot_url, None, ["inspection"])
 
         self.log("inspection", f"task {task_id} confirmed node {node_id}, status {next_status}")
         response = {
@@ -676,43 +624,6 @@ class RobotSystemService:
         if fire_event_result is not None:
             response["fire_event_result"] = fire_event_result
         return response
-
-    def handle_obstacle(self, task_id: str) -> dict[str, Any]:
-        task = self.get_task(task_id)
-        trajectory = task["trajectory"]
-        trajectory.extend(
-            [
-                {"time": utc_now(), "action": "decelerate"},
-                {"time": utc_now(), "action": "stop"},
-                {"time": utc_now(), "action": "detour"},
-                {"time": utc_now(), "action": "resume_route"},
-            ]
-        )
-        execute("UPDATE tasks SET trajectory = ?, updated_at = ? WHERE id = ?", (dumps(trajectory), utc_now(), task_id))
-        self.log("inspection", f"任务 {task_id} 已完成避障并恢复路线")
-        return {"task_id": task_id, "actions": ["decelerate", "stop", "detour", "resume_route"], "status": "running"}
-
-    def handle_battery(self, task_id: str, battery: int) -> dict[str, Any]:
-        task = self.get_task(task_id)
-        if battery > settings.low_battery_threshold:
-            return {"task_id": task_id, "battery": battery, "status": task["status"], "low_battery": False}
-        trajectory = task["trajectory"]
-        trajectory.append({"time": utc_now(), "action": "return_to_charge", "battery": battery})
-        execute(
-            """
-            UPDATE tasks SET status = 'interrupted', trajectory = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (dumps(trajectory), utc_now(), task_id),
-        )
-        self.log("device", f"任务 {task_id} 因低电量中断并自动返航", level="WARN")
-        return {
-            "task_id": task_id,
-            "battery": battery,
-            "status": "interrupted",
-            "return_to": "charging_station",
-            "interrupt_point_recorded": True,
-        }
 
     def emergency_pause(self, task_id: str) -> dict[str, Any]:
         self.get_task(task_id)
@@ -995,11 +906,21 @@ class RobotSystemService:
     def evaluate_person_face(self, tags: list[str], image_url: str, features: dict[str, Any]) -> dict[str, Any]:
         score = 0.0
         reasons: list[str] = []
+        whitelist_checked = bool(features.get("face_whitelist_checked"))
+        whitelist_matched = bool(features.get("face_whitelist_matched"))
+        whitelist_best_match = features.get("face_whitelist_best_match")
         face_check_requested = bool(features.get("face_check_requested")) or (
             "face" in image_url
             or any("face" in tag or "person" in tag or "human" in tag for tag in tags)
         )
         face_count = int(features.get("face_count") or 0)
+        face_ids = self.extract_face_ids(features)
+        face_context_available = (
+            face_count > 0
+            or bool(face_ids)
+            or bool(features.get("face_detected"))
+            or face_check_requested
+        )
         for keyword in PERSON_KEYWORDS:
             keyword_value = str(keyword).lower()
             if keyword_value in image_url or any(keyword_value in tag for tag in tags):
@@ -1016,8 +937,7 @@ class RobotSystemService:
                     "unauthorized_face_score",
                 }
                 and bool(features.get("face_whitelist_checked"))
-                and not face_check_requested
-                and face_count <= 0
+                and not face_context_available
             ):
                 continue
             if isinstance(value, bool) and value:
@@ -1029,16 +949,10 @@ class RobotSystemService:
                 if normalized > 0:
                     reasons.append(f"特征 {key}={value}")
 
-        face_ids = self.extract_face_ids(features)
-        face_context_available = (
-            face_check_requested
-            or face_count > 0
-            or bool(face_ids)
-            or (bool(features.get("face_detected")) and not whitelist_checked)
+        face_context_available = face_context_available or (
+            bool(features.get("face_whitelist_checked"))
+            and (face_check_requested or face_count > 0 or bool(face_ids))
         )
-        whitelist_checked = bool(features.get("face_whitelist_checked"))
-        whitelist_matched = bool(features.get("face_whitelist_matched"))
-        whitelist_best_match = features.get("face_whitelist_best_match")
         if whitelist_checked and whitelist_matched and face_context_available:
             matched_ids = face_ids or (
                 [str(whitelist_best_match.get("face_id"))]
@@ -1085,7 +999,7 @@ class RobotSystemService:
                 "reasons": [*reasons, "人脸已在白名单数据库中"],
                 "face_ids": face_ids,
             }
-        if score > 0:
+        if score > 0 and face_context_available:
             return {
                 "detected": True,
                 "authorized": None,
@@ -1413,31 +1327,6 @@ class RobotSystemService:
         if rows:
             self.log("task", f"机器人 {robot_id} 上线，补发待下发任务 {len(rows)} 个")
         return len(rows)
-
-    def set_robot_online(self, robot_id: str, online: bool) -> dict[str, Any]:
-        robot_id = self.normalize_robot_id(robot_id)
-        latest = self.latest_device_status(robot_id)
-        redelivered = len(
-            query(
-                "SELECT id FROM tasks WHERE robot_id = ? AND dispatch_status = 'queued'",
-                (robot_id,),
-            )
-        ) if online else 0
-        self.record_device_status(
-            {
-                "robot_id": robot_id,
-                "battery": latest["battery"] if latest else 0,
-                "localization": latest["localization"] if latest else "lost",
-                "sensor_status": latest["sensor_status"] if latest else {},
-                "cpu_usage": latest["cpu_usage"] if latest else 0.0,
-                "memory_usage": latest["memory_usage"] if latest else 0.0,
-                "signal_strength": latest["signal_strength"] if latest else 0,
-                "online": online,
-            }
-        )
-        robot = self.robot(robot_id)
-        robot["redelivered_tasks"] = redelivered
-        return robot
 
     def current_device_status(self) -> dict[str, Any]:
         return self.latest_device_status() or self.disconnected_device_status()

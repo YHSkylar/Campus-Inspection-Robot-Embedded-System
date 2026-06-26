@@ -64,7 +64,6 @@ npm run dev
 - 任务下发：`POST /api/tasks/{task_id}/dispatch`
 - 巡检开始：`POST /api/inspection/start`
 - 点位确认：`POST /api/inspection/{task_id}/confirm`
-- 障碍回报：`POST /api/inspection/{task_id}/obstacle`
 - 危险事件：`POST /api/events/detect`
 - 设备状态：`POST /api/devices/status`
 

@@ -21,7 +21,6 @@ export function Faces({ user }: FacesProps) {
   const [faceId, setFaceId] = useState("");
   const [name, setName] = useState("");
   const [roleName, setRoleName] = useState("security");
-  const [imagePath, setImagePath] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -48,29 +47,22 @@ export function Faces({ user }: FacesProps) {
     setSuccess("");
     setLoading(true);
     try {
-      if (file) {
-        await api.uploadFace(
-          {
-            face_id: faceId.trim(),
-            name: name.trim(),
-            role: roleName.trim() || undefined,
-            filename: file.name,
-          },
-          file,
-        );
-      } else {
-        await api.saveFace({
+      if (!file) {
+        throw new Error("请先上传样本图");
+      }
+      await api.uploadFace(
+        {
           face_id: faceId.trim(),
           name: name.trim(),
           role: roleName.trim() || undefined,
-          image_path: imagePath.trim() || undefined,
-        });
-      }
+          filename: file.name,
+        },
+        file,
+      );
       setSuccess("白名单已保存");
       setFaceId("");
       setName("");
       setRoleName("security");
-      setImagePath("");
       setFile(null);
       const input = document.getElementById("face-file") as HTMLInputElement | null;
       if (input) input.value = "";
@@ -148,21 +140,10 @@ export function Faces({ user }: FacesProps) {
                 />
               </div>
 
-              <div className="form-group">
-                <label>机器人端图片路径</label>
-                <input
-                  className="form-control"
-                  value={imagePath}
-                  onChange={(e) => setImagePath(e.target.value)}
-                  disabled={Boolean(file)}
-                  placeholder="/home/robot/project/assets/whitelist/security.jpg"
-                />
-              </div>
-
               <button
                 className="btn btn-primary"
                 type="submit"
-                disabled={loading || !faceId.trim() || !name.trim() || (!file && !imagePath.trim())}
+                disabled={loading || !faceId.trim() || !name.trim() || !file}
               >
                 {loading ? "保存中..." : "保存白名单"}
               </button>
@@ -179,7 +160,7 @@ export function Faces({ user }: FacesProps) {
                   <th>ID</th>
                   <th>姓名/标签</th>
                   <th>角色</th>
-                  <th>样本图</th>
+                  <th>样本</th>
                   <th>更新</th>
                   {canManage && <th>操作</th>}
                 </tr>
@@ -197,9 +178,7 @@ export function Faces({ user }: FacesProps) {
                       <td>{face.id}</td>
                       <td>{face.name}</td>
                       <td>{face.role || "-"}</td>
-                      <td style={{ maxWidth: 260, wordBreak: "break-all" }}>
-                        {face.image_path || "-"}
-                      </td>
+                      <td>{face.image_path ? "已上传" : "-"}</td>
                       <td>{new Date(face.updated_at).toLocaleString("zh-CN")}</td>
                       {canManage && (
                         <td>

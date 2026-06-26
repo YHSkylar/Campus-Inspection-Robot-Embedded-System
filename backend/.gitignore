@@ -7,3 +7,4 @@ inspection_robot.db
 inspection_robot.db-*
 *.sqlite
 *.sqlite3
+traces/

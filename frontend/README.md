@@ -96,8 +96,3 @@ uvicorn app.main:app --reload
 roslaunch campus_inspection_robot hardware_runtime.launch map_file:=/absolute/path/to/map.yaml
 ```
 
-## Ubuntu 机器人端部署
-
-完整部署步骤见：
-
-- [UBUNTU_DEPLOYMENT.md](../UBUNTU_DEPLOYMENT.md)

@@ -105,7 +105,7 @@ export const PROTECTED_ROUTES: ProtectedRouteConfig[] = [
       title: "数据查询与统计",
       icon: "📈",
     },
-    render: (user) => <QueryPage user={user} />,
+    render: () => <QueryPage />,
   },
 ];
 

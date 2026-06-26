@@ -225,12 +225,7 @@ export function Tasks({ user }: TasksProps) {
                   return (
                     <tr key={task.id}>
                       <td>{task.id}</td>
-                      <td>
-                        <div>{task.route_name}</div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                          {task.route_points.length} 个巡检点
-                        </div>
-                      </td>
+                      <td>{task.route_name}</td>
                       <td>{MODE_LABELS[task.mode] || task.mode}</td>
                       <td>{task.speed} m/s</td>
                       <td>
@@ -341,7 +336,7 @@ export function Tasks({ user }: TasksProps) {
                       setForm({ ...form, speed: Number(e.target.value) || 0.1 })
                     }
                     required
-                  />
+                    />
                 </div>
               </div>
               <div className="card" style={{ padding: 16, marginTop: 12 }}>

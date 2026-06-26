@@ -8,7 +8,6 @@ import type {
   LoginResponse,
   MaintenanceRecord,
   QueryResult,
-  Robot,
   RoutePoint,
   Task,
   TaskMode,
@@ -179,17 +178,6 @@ export const api = {
 
   listFaces: () => request<KnownFace[]>("/faces"),
 
-  saveFace: (data: {
-    face_id: string;
-    name: string;
-    role?: string;
-    image_path?: string;
-  }) =>
-    request<KnownFace>("/faces", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
   uploadFace: async (
     data: {
       face_id: string;
@@ -267,8 +255,6 @@ export const api = {
         ? `/devices/status/history?robot_id=${robotId}`
         : "/devices/status/history",
     ),
-
-  getRobot: (robotId: string) => request<Robot>(`/devices/robots/${robotId}`),
 
   // FU-006 系统维护
   maintenanceOperate: (data: {

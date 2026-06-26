@@ -17,14 +17,6 @@ function routePointLabel(point: RoutePoint, index: number): string {
   return point.name || point.area || point.waypoint_name || `点位 ${index + 1}`;
 }
 
-function describeFireDetection(point: RoutePoint): string {
-  if (point.fire_detection_mode === "camera") return "到点后实时抓帧";
-  if (point.fire_detection_mode === "image") {
-    return point.fire_image_path ? `静态图片：${point.fire_image_path}` : "静态图片：未配置路径";
-  }
-  return "未启用";
-}
-
 export function Inspection({ user }: InspectionProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -88,14 +80,10 @@ export function Inspection({ user }: InspectionProps) {
           area: point?.area || point?.name || nodeId,
           waypoint_name: point?.waypoint_name || undefined,
         },
-        snapshot_url:
-          point?.inspection_image_path || point?.fire_image_path || point?.face_image_path || undefined,
         sensor_summary: {
           status: "normal",
           waypoint_name: point?.waypoint_name || undefined,
-          fire_detection_mode: point?.fire_detection_mode || undefined,
-          fire_image_path: point?.fire_image_path || undefined,
-          face_image_path: point?.face_image_path || undefined,
+          capture_mode: "realtime_capture",
         },
       });
       setSuccess(
@@ -231,8 +219,6 @@ export function Inspection({ user }: InspectionProps) {
                   }}
                 >
                   <div><strong>航点：</strong>{selectedPoint.waypoint_name || "未配置"}</div>
-                  <div><strong>火焰检测：</strong>{describeFireDetection(selectedPoint)}</div>
-                  <div><strong>人脸图：</strong>{selectedPoint.face_image_path || "未配置"}</div>
                   {selectedPoint.note && <div><strong>备注：</strong>{selectedPoint.note}</div>}
                 </div>
               )}
@@ -246,9 +232,7 @@ export function Inspection({ user }: InspectionProps) {
               </button>
 
               <div style={{ marginTop: 20 }}>
-                <div className="label" style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                  巡检进度 {completed.length}/{routePoints.length}
-                </div>
+                <div>巡检进度 {completed.length}/{routePoints.length}</div>
                 <div className="progress-bar">
                   <div
                     className="fill"
@@ -276,11 +260,6 @@ export function Inspection({ user }: InspectionProps) {
                       }}
                     >
                       <div>{done ? "✓ " : "○ "}{routePointLabel(point, index)}</div>
-                      <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
-                        航点: {point.waypoint_name || "未配置"}
-                        {` | 火焰检测: ${describeFireDetection(point)}`}
-                        {point.face_image_path ? ` | 人脸图: ${point.face_image_path}` : ""}
-                      </div>
                     </div>
                   );
                 })}
